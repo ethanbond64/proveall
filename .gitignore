@@ -1,0 +1,21 @@
+.env
+
+# Libraries/executables
+node_modules
+dist
+release
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Rust / Tauri
+tauri_src/target
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+tauri_src/.env

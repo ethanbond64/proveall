@@ -1,0 +1,225 @@
+import React, { useState, useCallback } from 'react';
+import { ReviewContextProvider, useReviewContext } from './ReviewContext';
+import FileTree from './filetree/FileTree';
+import EditorPanel from './editor/EditorPanel';
+import ReviewControls from './controls/ReviewControls';
+import IssueReviewControls from './controls/IssueReviewControls';
+import IssueDataPanel from './issuedata/IssueDataPanel';
+import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import '../../styles.css';
+
+// Inner component that uses the context
+function ReviewProjectPageInner({
+  project,
+  projectState,
+  reviewMode = COMMIT_REVIEW_MODE,
+  onNavigateBack,
+  onNavigateToIssue
+}) {
+  const context = useReviewContext();
+  const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(false);
+  const [isIssuePanelCollapsed, setIsIssuePanelCollapsed] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  // Extract VCS info from projectState
+  const vcsInfo = projectState?.branchData ? {
+    isVCS: true,
+    type: 'git',
+    instanceData: {
+      branch: projectState.branchData.branch,
+      baseBranch: projectState.branchData.baseBranch
+    },
+    hiddenFiles: new Set(['.git', 'node_modules', '.idea', '.vscode'])
+  } : null;
+
+  // Extract diff stats from context
+  const diffStats = context.touchedFiles.size > 0 ? {
+    additions: Array.from(context.touchedFiles.values())
+      .reduce((sum, file) => sum + (file.additions || 0), 0),
+    deletions: Array.from(context.touchedFiles.values())
+      .reduce((sum, file) => sum + (file.deletions || 0), 0)
+  } : null;
+
+  // Auto-select first touched file when loading in issue mode
+  React.useEffect(() => {
+    if (context.mode === 'issue' && context.touchedFiles.size > 0 && !selectedFile) {
+      // Get the first touched file
+      const firstTouchedFile = Array.from(context.touchedFiles.values())[0];
+      if (firstTouchedFile) {
+        // Set the selected file to open it in the editor
+        setSelectedFile({
+          path: firstTouchedFile.path,
+          name: firstTouchedFile.path.split('/').pop()
+        });
+      }
+    }
+  }, [context.mode, context.touchedFiles]); // Intentionally omit selectedFile to avoid re-triggering
+
+  return (
+    <div className="project-page">
+      {/* Project Page Header - copied exact structure */}
+      <div className="project-page-header">
+        {onNavigateBack && (
+          <button className="back-button" onClick={onNavigateBack} title="Back to Project Page">
+            ‹ Back
+          </button>
+        )}
+        {vcsInfo?.isVCS && (
+          <div className="vcs-info">
+            <span className="vcs-badge" title={`Version control: ${vcsInfo.type}`}>
+              {vcsInfo.type.toUpperCase()}
+            </span>
+            {vcsInfo.instanceData?.branch && (
+              <span className="vcs-branch" title="Current branch">
+                {vcsInfo.instanceData.branch}
+              </span>
+            )}
+            {vcsInfo.instanceData?.baseBranch && (
+              <span className="vcs-compare" title={`Comparing to ${vcsInfo.instanceData.baseBranch}`}>
+                vs {vcsInfo.instanceData.baseBranch}
+              </span>
+            )}
+            {diffStats && (diffStats.additions > 0 || diffStats.deletions > 0) && (
+              <span className="diff-stats">
+                {diffStats.additions > 0 && (
+                  <span className="additions" title="Lines added">
+                    +{diffStats.additions}
+                  </span>
+                )}
+                {diffStats.deletions > 0 && (
+                  <span className="deletions" title="Lines deleted">
+                    -{diffStats.deletions}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Commit Review Component - only shows in commit-review mode */}
+      {context.mode === 'commit' && reviewMode === COMMIT_REVIEW_MODE && (
+        <ReviewControls
+          commitHash={context.commit}
+          onSaveComplete={(eventId) => {
+            console.log('Review saved with event ID:', eventId);
+            if (onNavigateBack) {
+              onNavigateBack();
+            }
+          }}
+        />
+      )}
+
+      {/* Issue Review Component - only shows in issue mode */}
+      {context.mode === 'issue' && (
+        <IssueReviewControls
+          issueId={context.issueId}
+          onResolveComplete={(eventId) => {
+            console.log('Issue resolved with event ID:', eventId);
+            if (onNavigateBack) {
+              onNavigateBack();
+            }
+          }}
+        />
+      )}
+
+      {/* Branch Comparison Mode Indicator */}
+      {reviewMode === BRANCH_COMPARISON_MODE && (
+        <div className="branch-comparison-banner">
+          <span className="mode-indicator">Branch Comparison Mode</span>
+          <span className="mode-description">Viewing aggregated reviews (read-only)</span>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="main-content">
+        {/* File Panel */}
+        <div className={`file-panel ${isFilePanelCollapsed ? 'collapsed' : ''}`}>
+          <div className="panel-header">
+            <button
+              className="panel-collapse-btn"
+              onClick={() => setIsFilePanelCollapsed(!isFilePanelCollapsed)}
+              title={isFilePanelCollapsed ? 'Expand file panel' : 'Collapse file panel'}
+            >
+              {isFilePanelCollapsed ? '▶' : '◀'}
+            </button>
+            {!isFilePanelCollapsed && <span className="panel-title">Files</span>}
+          </div>
+          {!isFilePanelCollapsed && (
+            <FileTree
+              projectPath={project.path}
+              projectId={project.id}
+              selectedPath={selectedFile?.path}
+              onSelectFile={setSelectedFile}
+            />
+          )}
+        </div>
+
+        {/* Editor Panel */}
+        <EditorPanel
+          project={project}
+          selectedFile={selectedFile}
+          onActiveFileChange={setSelectedFile}
+        />
+
+        {/* Issue Data Panel - always shown */}
+        <div className={`issue-data-panel ${isIssuePanelCollapsed ? 'collapsed' : ''}`}>
+          <div className="panel-header">
+            {!isIssuePanelCollapsed && <span className="panel-title">Issues</span>}
+            <button
+              className="panel-collapse-btn"
+              onClick={() => setIsIssuePanelCollapsed(!isIssuePanelCollapsed)}
+              title={isIssuePanelCollapsed ? 'Expand issue panel' : 'Collapse issue panel'}
+            >
+              {isIssuePanelCollapsed ? '◀' : '▶'}
+            </button>
+          </div>
+          {!isIssuePanelCollapsed && (
+            <IssueDataPanel
+              selectedFile={selectedFile}
+              onNavigateBack={onNavigateBack}
+              onNavigateToIssue={onNavigateToIssue}
+              highlightedIssueId={context.issueId}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main component that provides the context
+function ReviewProjectPage({
+  project,
+  projectState,
+  commit,
+  issueId,
+  reviewMode = COMMIT_REVIEW_MODE,
+  branchContextId,
+  onNavigateBack,
+  onNavigateToIssue
+}) {
+  // Determine the mode based on props
+  const mode = issueId ? 'issue' : (reviewMode === BRANCH_COMPARISON_MODE ? 'branch' : 'commit');
+
+  return (
+    <ReviewContextProvider
+      mode={mode}
+      projectId={project?.id}
+      projectPath={project?.path}
+      commit={commit}
+      issueId={issueId}
+      branchContextId={branchContextId}
+    >
+      <ReviewProjectPageInner
+        project={project}
+        projectState={projectState}
+        reviewMode={reviewMode}
+        onNavigateBack={onNavigateBack}
+        onNavigateToIssue={onNavigateToIssue}
+      />
+    </ReviewContextProvider>
+  );
+}
+
+export default ReviewProjectPage;

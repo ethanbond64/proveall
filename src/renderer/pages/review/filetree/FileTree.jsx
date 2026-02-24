@@ -1,0 +1,166 @@
+import React, { useState } from 'react';
+import { useReviewContext } from '../ReviewContext';
+import ReviewPopup from '../components/ReviewPopup';
+
+// Component to render individual file with its own progress state
+function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
+  const context = useReviewContext();
+
+  // Get progress info from context's computed values
+  const fileProgress = context.fileProgress?.get(file.path) || {
+    progressState: 'untouched',
+    defaultState: null,
+    hasLineReviews: false,
+    changeBlocksCount: 0,
+    reviewedBlocksCount: 0,
+  };
+
+  const handleClick = () => {
+    if (onSelectFile) {
+      onSelectFile({
+        path: file.path,
+        name: file.name || file.path.split('/').pop(),
+        isDirectory: false
+      });
+    }
+  };
+
+  const handleReviewToggle = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (context.mode !== 'commit') return;
+
+    onShowPopup(e, file.path, fileProgress.defaultState);
+  };
+
+  const fileName = file.name || file.path.split('/').pop();
+
+  return (
+    <div className="tree-node">
+      <div
+        className={`tree-node-row file ${isSelected ? 'selected' : ''}`}
+        onClick={handleClick}
+        title={file.path}
+      >
+        <span className="tree-chevron-placeholder"></span>
+        <span className="tree-icon">📄</span>
+        <span className={`tree-name ${file.diffMode ? `status-${file.diffMode}` : ''}`}>
+          {fileName}
+        </span>
+
+        {context.mode === 'commit' && (
+          <>
+            {/* Diff mode indicator */}
+            {file.diffMode && (
+              <span
+                className={`file-status file-status-${file.diffMode}`}
+                title={`${file.diffMode === 'A' ? 'Added' : file.diffMode === 'M' ? 'Modified' : 'Deleted'}`}
+              >
+                {file.diffMode}
+              </span>
+            )}
+
+            {/* Default review indicator */}
+            <div className="file-review-toggles" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className={`file-review-dot ${fileProgress.defaultState || ''}`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={handleReviewToggle}
+                title={fileProgress.defaultState
+                  ? `File default: ${fileProgress.defaultState}. Click to change.`
+                  : 'Click to set file default review'}
+                style={{
+                  opacity: fileProgress.defaultState ? 1 : 0.3,
+                }}
+              />
+              {/* Progress indicator */}
+              <span
+                className={`file-progress-indicator ${fileProgress.progressState}`}
+                title={
+                  fileProgress.progressState === 'complete'
+                    ? 'All lines reviewed'
+                    : fileProgress.progressState === 'in-progress'
+                    ? `Review in progress (${fileProgress.reviewedBlocksCount}/${fileProgress.changeBlocksCount} blocks)`
+                    : 'Not reviewed'
+                }
+              />
+            </div>
+          </>
+        )}
+
+        {context.mode === 'branch' && (
+          <div className="file-review-toggles">
+            <span
+              className={`file-review-dot ${file.state || 'gray'}`}
+              title={`Aggregated review: ${file.state || 'gray'}`}
+              style={{ cursor: 'default' }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FileTree({
+  projectPath,
+  projectId,
+  selectedPath,
+  onSelectFile
+}) {
+  const context = useReviewContext();
+  const [filePopupState, setFilePopupState] = useState(null);
+
+  // Extract touched files from context
+  const touchedFiles = Array.from(context.touchedFiles.values());
+
+  const handleShowPopup = (e, path, currentState) => {
+    setFilePopupState({
+      position: {
+        x: e.clientX,
+        y: e.clientY
+      },
+      path,
+      currentState
+    });
+  };
+
+  return (
+    <>
+      <div className="file-tree">
+        {touchedFiles.length === 0 ? (
+          <div className="file-tree-empty">
+            <p>No files to review</p>
+          </div>
+        ) : (
+          <>
+            {touchedFiles.map(file => (
+              <FileTreeItem
+                key={file.path}
+                file={file}
+                isSelected={selectedPath === file.path}
+                onSelectFile={onSelectFile}
+                onShowPopup={handleShowPopup}
+              />
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Render file default review popup */}
+      {filePopupState && (
+        <ReviewPopup
+          mode="file-default"
+          position={filePopupState.position}
+          path={filePopupState.path}
+          currentState={filePopupState.currentState}
+          onClose={() => setFilePopupState(null)}
+        />
+      )}
+    </>
+  );
+}
+
+export default FileTree;
