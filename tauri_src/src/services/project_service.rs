@@ -100,7 +100,7 @@ fn build_event_entries(
     }
 
     let format_arg = "--format=%H%n%s%n%an%n%ae%n%aI";
-    let log_output = run_git(path, &["log", format_arg, range])
+    let log_output = run_git(path, &["log", "--no-merges", format_arg, range])
         .map(|o| o.stdout)
         .unwrap_or_default();
 

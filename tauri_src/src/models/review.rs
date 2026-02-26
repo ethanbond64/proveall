@@ -31,8 +31,6 @@ pub struct NewReview {
     pub line_end: Option<i32>,
     pub dimension: String,
     pub dimension_value: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 impl NewReview {
@@ -56,8 +54,6 @@ impl NewReview {
             line_end,
             dimension,
             dimension_value,
-            created_at: now,
-            updated_at: now,
         }
     }
 }

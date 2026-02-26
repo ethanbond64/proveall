@@ -24,8 +24,6 @@ pub struct NewIssue {
     pub project_id: String,
     pub created_event_id: String,
     pub comment: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 impl NewIssue {
@@ -37,8 +35,6 @@ impl NewIssue {
             project_id,
             created_event_id,
             comment,
-            created_at: now,
-            updated_at: now,
         }
     }
 }

@@ -53,7 +53,6 @@ pub fn open_project(state: State<DbState>, path: String) -> Result<OpenProjectRe
         Some(project) => {
             let now = Utc::now().naive_utc();
             let changeset = ProjectLastOpenedUpdate {
-                updated_at: now,
                 last_opened: Some(now),
             };
             project_repo::update(&mut conn, &project.id, changeset)

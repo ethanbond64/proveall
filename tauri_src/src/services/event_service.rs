@@ -67,14 +67,10 @@ pub fn create_event(
     create_composites_for_new_issues(conn, project_id, &new_event_id, &created_issues, &branch_context_id)?;
 
     // Update branch_context HEAD to point to this new event
-    let now = chrono::Utc::now().naive_utc();
     branch_context_repo::update(
         conn,
         &branch_context_id,
-        (
-            branch_context::head_event_id.eq(&new_event_id),
-            branch_context::updated_at.eq(now),
-        ),
+        branch_context::head_event_id.eq(&new_event_id),
     )?;
 
     Ok(CreateEventResponse { id: new_event_id })

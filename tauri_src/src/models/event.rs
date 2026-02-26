@@ -25,8 +25,6 @@ pub struct NewEvent {
     pub type_: String,
     pub hash: Option<String>,
     pub summary: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 impl NewEvent {
@@ -39,8 +37,6 @@ impl NewEvent {
             type_,
             hash,
             summary,
-            created_at: now,
-            updated_at: now,
         }
     }
 }

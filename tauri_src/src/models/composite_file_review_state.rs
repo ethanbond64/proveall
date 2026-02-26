@@ -23,8 +23,6 @@ pub struct NewCompositeFileReviewState {
     pub project_id: String,
     pub relative_file_path: String,
     pub summary_metadata: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -43,8 +41,6 @@ impl NewCompositeFileReviewState {
             project_id,
             relative_file_path,
             summary_metadata,
-            created_at: now,
-            updated_at: now,
         }
     }
 }

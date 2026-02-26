@@ -22,8 +22,6 @@ pub struct NewProject {
     pub id: String,
     pub path: String,
     pub name: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
     pub last_opened: Option<NaiveDateTime>,
 }
 
@@ -35,8 +33,6 @@ impl NewProject {
             id,
             path,
             name,
-            created_at: now,
-            updated_at: now,
             last_opened: Some(now),
         }
     }
@@ -45,6 +41,5 @@ impl NewProject {
 #[derive(AsChangeset, Debug)]
 #[diesel(table_name = projects)]
 pub struct ProjectLastOpenedUpdate {
-    pub updated_at: NaiveDateTime,
     pub last_opened: Option<NaiveDateTime>,
 }
