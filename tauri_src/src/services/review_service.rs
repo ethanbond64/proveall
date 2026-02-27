@@ -196,30 +196,15 @@ pub fn get_review_file_data(
             (diff, line_summary, issues)
         }
         ReviewType::Branch => {
-            // Handle both regular branch mode and issue-specific branch mode
-            let issue_event = if issue_id.is_some() {
-                find_event_for_issue(conn, issue_id)
-            } else {
-                None
-            };
-
-            let (event_id_to_use, diff_base) = if let Some(ref ie) = issue_event {
-                // When issue_id is present, use issue's event if available
-                let issue_event_id = Some(ie.id.as_str());
-                let issue_commit = ie.hash.as_deref().unwrap_or(&commit);
-                (issue_event_id, format!("{}^:{}", issue_commit, file_path))
-            } else {
-                // Standard branch mode
-                (event_id, format!("{}:{}", branch_context.base_branch, file_path))
-            };
-
+            let base_ref = format!("{}:{}", branch_context.base_branch, file_path);
             let diff = Some(
-                run_git(path, &["show", &diff_base])
+                run_git(path, &["show", &base_ref])
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(conn, event_id_to_use, &file_path, &branch_context_id, issue_id)?;
-            let issues = build_issues_from_event(conn, event_id_to_use, Some(&file_path), &branch_context_id)?;
+
+            let line_summary = build_branch_line_summary(conn, event_id, &file_path, &branch_context_id, issue_id)?;
+            let issues = build_issues_from_event(conn, event_id, Some(&file_path), &branch_context_id)?;
             (diff, line_summary, issues)
         }
     };
@@ -249,15 +234,6 @@ fn find_event_for_commit(
     })?
     .into_iter()
     .next())
-}
-
-fn find_event_for_issue(
-    conn: &mut SqliteConnection,
-    issue_id: Option<&str>,
-) -> Option<crate::models::event::Event> {
-    issue_id
-        .and_then(|iid| issue_repo::get(conn, iid).ok())
-        .and_then(|issue| event_repo::get(conn, &issue.created_event_id).ok())
 }
 
 fn build_branch_line_summary(
