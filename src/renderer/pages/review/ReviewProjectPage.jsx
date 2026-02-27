@@ -11,7 +11,6 @@ import '../../styles.css';
 function ReviewProjectPageInner({
   project,
   projectState,
-  reviewMode = COMMIT_REVIEW_MODE,
   onNavigateBack,
   onNavigateToIssue
 }) {
@@ -41,7 +40,7 @@ function ReviewProjectPageInner({
 
   // Auto-select file when loading with issueId in branch mode (prefer files with issues)
   React.useEffect(() => {
-    if (context.mode === 'branch' && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
+    if (context.mode === BRANCH_COMPARISON_MODE && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
       // Sort files alphabetically by path for consistent ordering
       const touchedFilesArray = Array.from(context.touchedFiles.values())
         .sort((a, b) => a.path.localeCompare(b.path));
@@ -107,7 +106,7 @@ function ReviewProjectPageInner({
       </div>
 
       {/* Commit Review Component - only shows in commit-review mode */}
-      {context.mode === 'commit' && reviewMode === COMMIT_REVIEW_MODE && (
+      {context.mode === COMMIT_REVIEW_MODE && (
         <ReviewControls
           commitHash={context.commit}
           onSaveComplete={(eventId) => {
@@ -120,7 +119,7 @@ function ReviewProjectPageInner({
       )}
 
       {/* Branch Comparison Mode Indicator */}
-      {reviewMode === BRANCH_COMPARISON_MODE && (
+      {context.mode === BRANCH_COMPARISON_MODE && (
         <div className="branch-comparison-banner">
           <span className="mode-indicator">Branch Comparison Mode</span>
           <span className="mode-description">Viewing aggregated reviews (read-only)</span>
@@ -195,12 +194,10 @@ function ReviewProjectPage({
   onNavigateBack,
   onNavigateToIssue
 }) {
-  // Determine the mode based on props - only 'commit' or 'branch'
-  const mode = reviewMode === BRANCH_COMPARISON_MODE ? 'branch' : 'commit';
 
   return (
     <ReviewContextProvider
-      mode={mode}
+      mode={reviewMode}
       projectId={project?.id}
       projectPath={project?.path}
       commit={commit}
@@ -210,7 +207,6 @@ function ReviewProjectPage({
       <ReviewProjectPageInner
         project={project}
         projectState={projectState}
-        reviewMode={reviewMode}
         onNavigateBack={onNavigateBack}
         onNavigateToIssue={onNavigateToIssue}
       />

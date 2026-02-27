@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import IssueResolveConfirmation from '../components/IssueResolveConfirmation';
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
 
 
 // Issue card component - simplified and cleaner
@@ -47,7 +48,7 @@ function IssueCard({ issue, isNew, isResolved, isHighlighted, onEdit, onDelete, 
             <button
               className="issue-action-btn"
               onClick={onResolve}
-              title={mode === 'commit' ? "Stage for resolution" : "Mark as resolved"}
+              title={mode === COMMIT_REVIEW_MODE ? "Stage for resolution" : "Mark as resolved"}
             >
               ✓
             </button>
@@ -56,7 +57,7 @@ function IssueCard({ issue, isNew, isResolved, isHighlighted, onEdit, onDelete, 
             <button
               className="issue-action-btn"
               onClick={onUnresolve}
-              title={mode === 'commit' ? "Unstage resolution" : "Reopen issue"}
+              title={mode === COMMIT_REVIEW_MODE ? "Unstage resolution" : "Reopen issue"}
             >
               ↺
             </button>
@@ -84,7 +85,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
   const handleCreateIssue = useCallback(() => {
     if (!newIssueComment.trim()) return;
 
-    const tempId = context.actions.createIssue(newIssueComment.trim());
+    context.actions.createIssue(newIssueComment.trim());
     setNewIssueComment('');
     setIsCreatingIssue(false);
   }, [newIssueComment, context.actions]);
@@ -111,7 +112,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
   // Handle resolve button click - show confirmation only in branch mode
   const handleResolveClick = useCallback((issue) => {
     // In commit mode, just stage the resolution locally without confirmation
-    if (context.mode === 'commit') {
+    if (context.mode === COMMIT_REVIEW_MODE) {
       context.actions.resolveIssue(issue.id);
     } else {
       // In branch mode, show confirmation popup
@@ -141,7 +142,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       console.log('Issue resolved with event ID:', eventId);
 
       // In branch mode: refresh the context data to show updated state
-      if (context.mode === 'branch') {
+      if (context.mode === BRANCH_COMPARISON_MODE) {
         await context.actions.refreshData();
         // If we have an issueId, navigate back after refresh
         if (context.issueId && onNavigateBack) {
@@ -162,18 +163,16 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
   // Determine which issues to display based on mode
   let displayIssues = [];
 
-  if (context.mode === 'branch' || context.mode === 'commit') {
-    // In all modes, show issues based on file selection
-    if (selectedFile && selectedFile.path) {
-      // Show issues for the selected file
-      const fileData = context.openFiles.get(selectedFile.path);
-      if (fileData && fileData.issues) {
-        displayIssues = Array.isArray(fileData.issues) ? fileData.issues : [];
-      }
-    } else {
-      // No file selected - show all issues from file system data
-      displayIssues = Array.from(context.issues.values());
+  // In all modes, show issues based on file selection
+  if (selectedFile && selectedFile.path) {
+    // Show issues for the selected file
+    const fileData = context.openFiles.get(selectedFile.path);
+    if (fileData && fileData.issues) {
+      displayIssues = Array.isArray(fileData.issues) ? fileData.issues : [];
     }
+  } else {
+    // No file selected - show all issues from file system data
+    displayIssues = Array.from(context.issues.values());
   }
 
   // Filter unresolved and resolved issues
@@ -193,7 +192,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
                     unresolvedExistingIssues.length > 0;
 
   // In branch mode, can't create/edit issues, but can resolve them
-  const canCreateEdit = context.mode === 'commit';
+  const canCreateEdit = context.mode === COMMIT_REVIEW_MODE;
   const canResolve = true; // All modes can resolve issues
 
   return (
@@ -201,11 +200,11 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       {/* Mode-specific header */}
       <div className="mode-header">
         <p className="mode-info">
-          {context.mode === 'commit'
+          {context.mode === COMMIT_REVIEW_MODE
             ? (selectedFile
                 ? `Issues in ${selectedFile.path.split('/').pop()}`
                 : 'All Issues - Mark resolutions to include in commit')
-            : context.mode === 'branch'
+            : context.mode === BRANCH_COMPARISON_MODE
               ? (selectedFile
                   ? `Issues in ${selectedFile.path.split('/').pop()}`
                   : context.issueId ? 'Reviewing Specific Issue' : 'All Issues in Branch')
@@ -288,7 +287,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       {resolvedIssues.length > 0 && (
         <div className="issue-section resolved-issues">
           <h3 className="issue-section-title">
-            {context.mode === 'commit' ? 'Staged Resolutions' : 'Resolved Issues'} ({resolvedIssues.length})
+            {context.mode === COMMIT_REVIEW_MODE ? 'Staged Resolutions' : 'Resolved Issues'} ({resolvedIssues.length})
           </h3>
           {resolvedIssues.map(issue => (
             <IssueCard
@@ -308,7 +307,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       {unresolvedExistingIssues.length > 0 && (
         <div className="issue-section existing-issues">
           <h3 className="issue-section-title">
-            {context.mode === 'branch' ? 'Issues' : 'Existing Issues'} ({unresolvedExistingIssues.length})
+            {context.mode === BRANCH_COMPARISON_MODE ? 'Issues' : 'Existing Issues'} ({unresolvedExistingIssues.length})
           </h3>
           {unresolvedExistingIssues.map(issue => (
             <IssueCard
@@ -336,7 +335,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       {/* Empty state */}
       {!hasIssues && !isCreatingIssue && (
         <div className="issue-empty-state">
-          <p>No issues {selectedFile && context.mode === 'branch' ? 'in this file' : 'yet'}.</p>
+          <p>No issues {selectedFile && context.mode === BRANCH_COMPARISON_MODE ? 'in this file' : 'yet'}.</p>
           {canCreateEdit && (
             <p className="issue-empty-hint">
               Create issues for problems found during review.
