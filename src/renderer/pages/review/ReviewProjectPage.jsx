@@ -40,9 +40,9 @@ function ReviewProjectPageInner({
       .reduce((sum, file) => sum + (file.deletions || 0), 0)
   } : null;
 
-  // Auto-select first touched file when loading in issue mode
+  // Auto-select first touched file when loading with issueId in branch mode
   React.useEffect(() => {
-    if (context.mode === 'issue' && context.touchedFiles.size > 0 && !selectedFile) {
+    if (context.mode === 'branch' && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
       // Get the first touched file
       const firstTouchedFile = Array.from(context.touchedFiles.values())[0];
       if (firstTouchedFile) {
@@ -53,7 +53,7 @@ function ReviewProjectPageInner({
         });
       }
     }
-  }, [context.mode, context.touchedFiles]); // Intentionally omit selectedFile to avoid re-triggering
+  }, [context.mode, context.issueId, context.touchedFiles]); // Intentionally omit selectedFile to avoid re-triggering
 
   return (
     <div className="project-page">
@@ -110,8 +110,8 @@ function ReviewProjectPageInner({
         />
       )}
 
-      {/* Issue Review Component - only shows in issue mode */}
-      {context.mode === 'issue' && (
+      {/* Issue Review Component - shows in branch mode with issueId */}
+      {context.mode === 'branch' && context.issueId && (
         <IssueReviewControls
           issueId={context.issueId}
           onResolveComplete={(eventId) => {
@@ -199,8 +199,8 @@ function ReviewProjectPage({
   onNavigateBack,
   onNavigateToIssue
 }) {
-  // Determine the mode based on props
-  const mode = issueId ? 'issue' : (reviewMode === BRANCH_COMPARISON_MODE ? 'branch' : 'commit');
+  // Determine the mode based on props - only 'commit' or 'branch'
+  const mode = reviewMode === BRANCH_COMPARISON_MODE ? 'branch' : 'commit';
 
   return (
     <ReviewContextProvider

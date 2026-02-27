@@ -218,7 +218,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               ) : issues.length > 0 ? (
                 issues.map((issue) => (
                   //  TODO index of 0 is unsafe
-                  <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, 'issue', issue.id)}>
+                  <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
                     <div className="issue-id">#{issue.id.substring(0, 8)}</div>
                     <div className="issue-comment">{issue.comment}</div>
                   </div>

@@ -108,13 +108,13 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
     setEditComment('');
   }, []);
 
-  // Handle resolve button click - show confirmation only in branch/issue mode
+  // Handle resolve button click - show confirmation only in branch mode
   const handleResolveClick = useCallback((issue) => {
     // In commit mode, just stage the resolution locally without confirmation
     if (context.mode === 'commit') {
       context.actions.resolveIssue(issue.id);
     } else {
-      // In branch or issue mode, show confirmation popup
+      // In branch mode, show confirmation popup
       setConfirmingIssue(issue);
     }
   }, [context.mode, context.actions]);
@@ -130,7 +130,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
 
     const issueId = confirmingIssue.id;
 
-    // This should only be called in branch or issue mode (not commit mode)
+    // This should only be called in branch mode (not commit mode)
     setIsResolving(true);
     try {
       // Update local state first
@@ -143,10 +143,10 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
       // In branch mode: refresh the context data to show updated state
       if (context.mode === 'branch') {
         await context.actions.refreshData();
-      }
-      // In issue mode: navigate back to project page
-      else if (context.mode === 'issue' && onNavigateBack) {
-        onNavigateBack();
+        // If we have an issueId, navigate back after refresh
+        if (context.issueId && onNavigateBack) {
+          onNavigateBack();
+        }
       }
     } catch (error) {
       console.error('Failed to resolve issue:', error);
@@ -162,7 +162,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
   // Determine which issues to display based on mode
   let displayIssues = [];
 
-  if (context.mode === 'branch' || context.mode === 'commit' || context.mode === 'issue') {
+  if (context.mode === 'branch' || context.mode === 'commit') {
     // In all modes, show issues based on file selection
     if (selectedFile && selectedFile.path) {
       // Show issues for the selected file
@@ -192,7 +192,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
                     resolvedIssues.length > 0 ||
                     unresolvedExistingIssues.length > 0;
 
-  // In branch/issue mode, can't create/edit issues, but can resolve them
+  // In branch mode, can't create/edit issues, but can resolve them
   const canCreateEdit = context.mode === 'commit';
   const canResolve = true; // All modes can resolve issues
 
@@ -205,13 +205,11 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
             ? (selectedFile
                 ? `Issues in ${selectedFile.path.split('/').pop()}`
                 : 'All Issues - Mark resolutions to include in commit')
-            : context.mode === 'issue'
+            : context.mode === 'branch'
               ? (selectedFile
                   ? `Issues in ${selectedFile.path.split('/').pop()}`
-                  : highlightedIssueId ? 'Reviewing Specific Issue' : 'All Issues')
-              : (selectedFile
-                  ? `Issues in ${selectedFile.path.split('/').pop()}`
-                  : 'All Issues in Branch')
+                  : context.issueId ? 'Reviewing Specific Issue' : 'All Issues in Branch')
+              : ''
           }
         </p>
       </div>

@@ -118,7 +118,7 @@ function App() {
 
   // Navigate to issue-specific review
   const handleNavigateToIssue = (issueId) => {
-    // Save current state before switching to issue mode
+    // Save current state before switching to branch mode with issueId
     const historyEntry = {
       page: 'review',
       mode: reviewMode,
@@ -133,12 +133,13 @@ function App() {
       return newHistory.slice(-10);
     });
 
-    // Keep the current commit but switch to issue mode
+    // Keep the current commit but switch to branch mode with issueId
     setReviewContext(prev => ({
       commit: prev?.commit,
-      issueId
+      issueId,
+      branchContextId
     }));
-    setReviewMode('issue'); // Explicitly set to issue mode
+    setReviewMode(BRANCH_COMPARISON_MODE); // Set to branch mode for issue filtering
   };
 
   // Navigate back to menu (project selection)

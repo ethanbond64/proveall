@@ -26,7 +26,7 @@ function IssueReviewControls({
       const eventId = await context.actions.saveResolution(issueId);
       console.log('Issue resolved with event ID:', eventId);
 
-      // Call the completion callback if provided (returns to project page in issue mode)
+      // Call the completion callback if provided (returns to project page when in branch mode with issueId)
       if (onResolveComplete) {
         onResolveComplete(eventId);
       }

@@ -6,7 +6,7 @@ const ReviewContext = createContext(null);
 // Initial state structure
 const initialState = {
   // Core State (from getReviewFileSystemData)
-  mode: 'commit', // 'commit' | 'branch' | 'issue'
+  mode: 'commit', // 'commit' | 'branch'
   projectId: null,
   projectPath: '',
   commit: '',
@@ -113,11 +113,11 @@ function reviewReducer(state, action) {
           issueRef: entry.issueId ? String(entry.issueId) : null,
         }));
 
-        // In branch/issue mode, just use backend data directly (read-only)
+        // In branch mode, just use backend data directly (read-only)
         // In commit mode, merge with existing session data
         let finalLineRanges;
-        if (state.mode === 'branch' || state.mode === 'issue') {
-          // Read-only modes: use backend data directly
+        if (state.mode === 'branch') {
+          // Read-only mode: use backend data directly
           finalLineRanges = lineRangesFromBackend;
         } else {
           // Commit mode: merge backend with session data
@@ -378,8 +378,9 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       dispatch({ type: ActionTypes.SET_LOADING, payload: true });
 
       try {
-        // Determine review type
-        const reviewType = issueId ? 'issue' : (mode === 'branch' ? 'branch' : 'commit');
+        // Determine review type - only 'commit' or 'branch'
+        // When issueId is present, we still use 'branch' mode
+        const reviewType = mode === 'branch' ? 'branch' : 'commit';
 
         // Load file system data from backend
         const data = await window.electronAPI.getReviewFileSystemData(
@@ -522,8 +523,8 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       dispatch({ type: ActionTypes.SET_LOADING, payload: true });
 
       try {
-        // Determine review type
-        const reviewType = state.issueId ? 'issue' : (state.mode === 'branch' ? 'branch' : 'commit');
+        // Determine review type - only 'commit' or 'branch'
+        const reviewType = state.mode === 'branch' ? 'branch' : 'commit';
 
         // Reload file system data from backend
         const data = await window.electronAPI.getReviewFileSystemData(
@@ -597,10 +598,10 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
       try {
         // Validate based on mode
-        if (state.mode === 'issue') {
-          // In issue mode, we're primarily resolving/unresolving issues
+        if (state.mode === 'branch' && state.issueId) {
+          // In branch mode with issueId, we're primarily resolving/unresolving issues
           if (resolvedIssues.length === 0 && newIssues.length === 0) {
-            throw new Error('No changes to save in issue mode');
+            throw new Error('No changes to save for this issue');
           }
         } else if (state.mode === 'commit') {
           // In commit mode, we don't enforce validation here
@@ -613,7 +614,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
         }
 
         // Call the API to create the event
-        const eventType = state.mode === 'issue' ? 'resolution' : 'commit';
+        const eventType = (state.mode === 'branch' && state.issueId) ? 'resolution' : 'commit';
         const eventId = await window.electronAPI.createEvent(
           state.projectId,
           state.commit,
