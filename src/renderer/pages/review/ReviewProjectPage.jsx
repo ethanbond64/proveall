@@ -5,6 +5,7 @@ import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import { hasIssues } from '../../utils/reviewUtils';
 import '../../styles.css';
 
 // Inner component that uses the context
@@ -46,7 +47,7 @@ function ReviewProjectPageInner({
         .sort((a, b) => a.path.localeCompare(b.path));
 
       // First, try to find a file with non-green status (files tied to the issue)
-      let fileToSelect = touchedFilesArray.find(file => file.state !== 'green');
+      let fileToSelect = touchedFilesArray.find(file => hasIssues(file.state));
 
       // If no non-green files found, fall back to first file
       if (!fileToSelect) {

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useCallback } from 'react';
 import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../constants";
+import {hasIssues} from "../../utils/reviewUtils";
 
 // Create the context
 const ReviewContext = createContext(null);
@@ -704,13 +705,13 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       // All non-green reviews must have issues
       for (const [path, review] of state.session.fileReviews) {
         // Check default review
-        if (review.defaultState && review.defaultState !== 'green' && !review.defaultIssueRef) {
+        if (review.defaultState && hasIssues(review.defaultState) && !review.defaultIssueRef) {
           return false;
         }
 
         // Check line range reviews
         for (const range of review.lineRanges) {
-          if (range.state !== 'green' && !range.issueRef) {
+          if (hasIssues(range.state) && !range.issueRef) {
             return false;
           }
         }

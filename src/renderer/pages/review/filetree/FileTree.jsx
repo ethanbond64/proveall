@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import ReviewPopup from '../components/ReviewPopup';
 import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
+import { isApproved } from '../../../utils/reviewUtils';
 
 // Component to render individual file with its own progress state
 function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
@@ -122,7 +123,7 @@ function FileTree({
 
   if (context.mode === BRANCH_COMPARISON_MODE) {
     touchedFiles.forEach(file => {
-      if (file.state === 'green') {
+      if (isApproved(file.state)) {
         approvedFiles.push(file);
       } else {
         filesWithIssues.push(file);
