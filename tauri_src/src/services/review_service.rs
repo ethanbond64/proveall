@@ -50,7 +50,7 @@ pub fn get_review_file_system_data(
     let (touched_files, issues) = match review_type {
         ReviewType::Commit => (
             build_commit_touched_files(path, &commit, &event)?,
-            build_issues_from_event(conn, branch_context.head_event_id.as_deref(), None, &branch_context_id, None)?,
+            build_issues_from_event(conn, branch_context.head_event_id.as_deref(), None, &branch_context_id)?,
         ),
         ReviewType::Branch => {
             // If issue_id is present, get the issue's event for proper filtering
@@ -64,7 +64,7 @@ pub fn get_review_file_system_data(
 
             (
                 build_branch_touched_files(conn, path, event_id_to_use, &branch_context_id, &branch_context.base_branch, issue_id)?,
-                build_issues_from_event(conn, event_id_to_use, None, &branch_context_id, issue_id)?,
+                build_issues_from_event(conn, event_id_to_use, None, &branch_context_id)?,
             )
         }
     };
@@ -203,7 +203,7 @@ pub fn get_review_file_data(
                     .unwrap_or_default(),
             );
             let line_summary = build_branch_line_summary(conn, branch_context.head_event_id.as_deref(), &file_path, &branch_context_id, None)?;
-            let issues = build_issues_from_event(conn, branch_context.head_event_id.as_deref(), Some(&file_path), &branch_context_id, None)?;
+            let issues = build_issues_from_event(conn, branch_context.head_event_id.as_deref(), Some(&file_path), &branch_context_id)?;
             (diff, line_summary, issues)
         }
         ReviewType::Branch => {
@@ -230,7 +230,7 @@ pub fn get_review_file_data(
                     .unwrap_or_default(),
             );
             let line_summary = build_branch_line_summary(conn, event_id_to_use, &file_path, &branch_context_id, issue_id)?;
-            let issues = build_issues_from_event(conn, event_id_to_use, Some(&file_path), &branch_context_id, issue_id)?;
+            let issues = build_issues_from_event(conn, event_id_to_use, Some(&file_path), &branch_context_id)?;
             (diff, line_summary, issues)
         }
     };
@@ -332,12 +332,7 @@ fn build_issues_from_event(
     event_id: Option<&str>,
     file_path: Option<&str>,
     branch_context_id: &str,
-    issue_id: Option<&str>,
 ) -> Result<Vec<ReviewIssueEntry>, AppError> {
-    // If a specific issue_id is provided, return only that issue
-    if let Some(iid) = issue_id {
-        return Ok(fetch_single_issue(conn, Some(iid)));
-    }
 
     // Otherwise, return all issues for the event
     let Some(eid) = event_id else {
