@@ -172,7 +172,9 @@ function FileTree({
                   style={{ cursor: 'pointer' }}
                 >
                   <span className="tree-chevron" style={{ transform: expandedSections.issues ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                  <span className="file-tree-section-title">Files with Open Issues ({filesWithIssues.length})</span>
+                  <span className="file-tree-section-title">
+                    {context.issueId ? `Files with This Issue (${filesWithIssues.length})` : `Files with Open Issues (${filesWithIssues.length})`}
+                  </span>
                 </div>
                 {expandedSections.issues && (
                   <div className="file-tree-section-content">
