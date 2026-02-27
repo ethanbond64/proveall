@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import MenuPage from './pages/menu/MenuPage';
 import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
@@ -14,7 +14,6 @@ function App() {
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [reviewMode, setReviewMode] = useState(COMMIT_REVIEW_MODE);
   const [reviewContext, setReviewContext] = useState(null); // Stores {commit, issueId, branchContextId} for review
-  const [navigationHistory, setNavigationHistory] = useState([]); // Navigation history stack
   const [branchContextId, setBranchContextId] = useState(null); // Branch context for the project
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [currentBranch, setCurrentBranch] = useState(null);
@@ -39,7 +38,6 @@ function App() {
       setProjectState(null);
       setShowReviewPage(false);
       setReviewContext(null);
-      setNavigationHistory([]);
     }
   };
 
@@ -54,7 +52,6 @@ function App() {
       setProjectState(null);
       setShowReviewPage(false);
       setReviewContext(null);
-      setNavigationHistory([]);
       setPendingProjectOpen(null);
     }
   };
@@ -67,72 +64,20 @@ function App() {
   };
 
   // Navigate to Review Page with review context
-  const handleNavigateToReview = (commit, mode = COMMIT_REVIEW_MODE, issueId = null, addToHistory = true) => {
-    // Save current state to history before navigating
-    if (addToHistory) {
-      const historyEntry = {
-        page: showReviewPage ? 'review' : 'project',
-        mode: showReviewPage ? reviewMode : null,
-        commit: showReviewPage ? reviewContext?.commit : null,
-        issueId: showReviewPage ? reviewContext?.issueId : null,
-        timestamp: Date.now()
-      };
-
-      // Limit history to 10 entries to prevent memory issues
-      setNavigationHistory(prev => {
-        const newHistory = [...prev, historyEntry];
-        return newHistory.slice(-10);
-      });
-    }
-
+  const handleNavigateToReview = (commit, mode = COMMIT_REVIEW_MODE, issueId = null) => {
     setReviewContext({ commit, issueId, branchContextId });
     setReviewMode(mode);
     setShowReviewPage(true);
   };
 
-  // Smart back navigation using history
+  // Simple back navigation - always go back to project page
   const handleNavigateBack = () => {
-    if (navigationHistory.length > 0) {
-      const previousState = navigationHistory[navigationHistory.length - 1];
-      setNavigationHistory(prev => prev.slice(0, -1)); // Pop from history
-
-      if (previousState.page === 'project') {
-        // Return to project page
-        setShowReviewPage(false);
-        setReviewContext(null);
-      } else if (previousState.page === 'review') {
-        // Restore previous review state without adding to history
-        handleNavigateToReview(
-          previousState.commit,
-          previousState.mode,
-          previousState.issueId,
-          false // Don't add to history
-        );
-      }
-    } else {
-      // Default fallback to project page
-      setShowReviewPage(false);
-      setReviewContext(null);
-    }
+    setShowReviewPage(false);
+    setReviewContext(null);
   };
 
   // Navigate to issue-specific review
   const handleNavigateToIssue = (issueId) => {
-    // Save current state before switching to branch mode with issueId
-    const historyEntry = {
-      page: 'review',
-      mode: reviewMode,
-      commit: reviewContext?.commit,
-      issueId: reviewContext?.issueId,
-      timestamp: Date.now()
-    };
-
-    // Limit history to 10 entries
-    setNavigationHistory(prev => {
-      const newHistory = [...prev, historyEntry];
-      return newHistory.slice(-10);
-    });
-
     // Keep the current commit but switch to branch mode with issueId
     setReviewContext(prev => ({
       commit: prev?.commit,
@@ -148,7 +93,6 @@ function App() {
     setProjectState(null);
     setShowReviewPage(false);
     setReviewContext(null);
-    setNavigationHistory([]); // Clear history when leaving project
   };
 
   return (
