@@ -24,6 +24,20 @@ function EditorPanel({ selectedFile, onActiveFileChange = () => {} }) {
     }
   }, [selectedFile]);
 
+  // Reload file data when issueId changes (for branch mode with issue filtering)
+  useEffect(() => {
+    if (context.mode === 'branch' && tabs.length > 0) {
+      // Reload all open tabs to get updated line summaries for the new issue
+      tabs.forEach(tab => {
+        if (tab.viewMode === 'ready') {
+          context.actions.loadFileData(tab.relativePath).catch(error => {
+            console.error(`Failed to reload file ${tab.fileName} after issue change:`, error);
+          });
+        }
+      });
+    }
+  }, [context.issueId]); // Re-run when issueId changes
+
   const openFileInNewTab = async (node) => {
     const tabId = `tab-${Date.now()}`;
 
