@@ -15,9 +15,55 @@ This plan outlines the refactoring of the review system to simplify from three m
 - **Issue functionality**: Becomes conditional behavior within `branch` mode
 - **Trigger**: When `mode === 'branch' && issueId` is present, apply issue-specific filtering
 
+## Phase 1 Discoveries (Completed)
+
+### Files with 'issue' mode references:
+1. **Backend (Rust)**:
+   - `tauri_src/src/services/review_service.rs` - Main implementation with ReviewType enum
+   - `tauri_src/src/commands/review_commands.rs` - Tauri command interfaces
+   - `tauri_src/src/repositories/mod.rs` - XRef query methods
+
+2. **Frontend (JavaScript/React)**:
+   - `src/renderer/App.jsx` - Sets mode to 'issue' when navigating (line 77)
+   - `src/renderer/pages/project/ProjectPage.jsx` - Passes 'issue' mode (line 221)
+   - `src/renderer/pages/review/ReviewContext.jsx` - Dynamically determines mode based on issueId
+   - `src/renderer/pages/review/issuedata/IssueDataPanel.jsx` - UI logic based on mode
+   - `src/renderer/pages/review/ReviewProjectPage.jsx` - UI logic based on mode
+   - `src/renderer/tauriAPI.js` - API calls pass reviewType parameter
+
+### Backend Implementation Analysis:
+
+#### `get_review_file_system_data` method:
+- Uses `ReviewType::parse` to convert string to enum (lines 46)
+- Match statement on ReviewType (lines 52-69)
+- Issue mode:
+  - Calls `find_event_for_issue` to get issue's event
+  - Uses `build_issue_touched_files` with `join_list_by_event_and_issue`
+  - Returns single issue via `fetch_single_issue`
+
+#### `get_review_file_data` method:
+- Similar structure with `ReviewType::parse` (lines 195)
+- Match statement on ReviewType (lines 207-248)
+- Issue mode:
+  - Calls `find_event_for_issue` to get issue's event
+  - Gets diff from issue event's parent commit
+  - Uses `build_issue_line_summary` with `join_list_by_event_and_issue`
+  - Returns single issue via `fetch_single_issue`
+
+### XRef Query Methods:
+1. **`join_list_by_event`** - Filters by event_id and branch_context_id only
+2. **`join_list_by_event_and_issue`** - Filters by event_id, issue_id, AND branch_context_id
+
+### Key Functions to Refactor:
+- `build_branch_touched_files` → needs conditional issueId filtering
+- `build_branch_line_summary` → needs conditional issueId filtering
+- `build_issues_from_event` → needs conditional issueId filtering
+- `build_issue_touched_files` → can be merged into branch version
+- `build_issue_line_summary` → can be merged into branch version
+
 ## Implementation Tasks
 
-### Phase 1: Discovery & Analysis
+### Phase 1: Discovery & Analysis ✅ COMPLETED
 1. **Search for all occurrences of 'issue' mode in the codebase**
    - Backend API methods
    - Frontend/client code
@@ -37,6 +83,19 @@ This plan outlines the refactoring of the review system to simplify from three m
 4. **Identify all xref table queries**
    - Map out all queries that need conditional issueId filtering
    - Document the filtering logic needed for each
+
+### Frontend Mode Logic Patterns:
+In `ReviewContext.jsx`, the code dynamically determines the mode:
+```javascript
+// Line 382:
+const reviewType = issueId ? 'issue' : (mode === 'branch' ? 'branch' : 'commit');
+
+// Line 526:
+const reviewType = state.issueId ? 'issue' : (state.mode === 'branch' ? 'branch' : 'commit');
+
+// Line 616:
+const eventType = state.mode === 'issue' ? 'resolution' : 'commit';
+```
 
 ### Phase 2: Backend Refactoring
 
@@ -129,6 +188,36 @@ Methods will maintain the same signatures but with updated behavior:
 - **Backward compatibility**: Consider adding temporary deprecation warning for 'issue' mode
 - **Testing**: Comprehensive testing of all three scenarios (commit, branch, branch+issueId)
 - **Rollback plan**: Keep original code in version control for quick revert if needed
+
+## Refactoring Strategy
+
+### Backend Strategy:
+1. **Merge Issue functions into Branch functions**:
+   - `build_issue_touched_files` → merge into `build_branch_touched_files`
+   - `build_issue_line_summary` → merge into `build_branch_line_summary`
+   - Add `issue_id: Option<&str>` parameter to branch functions
+
+2. **Conditional XRef Queries**:
+   ```rust
+   // When issue_id is Some(id), use:
+   join_list_by_event_and_issue(conn, event_id, issue_id, branch_context_id)
+
+   // When issue_id is None, use:
+   join_list_by_event(conn, event_id, branch_context_id)
+   ```
+
+3. **Mode Handling**:
+   - Remove `ReviewType::Issue` enum variant
+   - In Branch mode, check for `issue_id.is_some()` to apply issue-specific logic
+
+### Frontend Strategy:
+1. **Change mode setting**:
+   - Replace `setReviewMode('issue')` with `setReviewMode('branch')`
+   - Ensure issueId is passed in context
+
+2. **Update mode checks**:
+   - Replace `mode === 'issue'` with `mode === 'branch' && issueId`
+   - Update ReviewContext to handle branch mode with issueId
 
 ## Success Criteria
 - [ ] Only 2 modes accepted: 'commit' and 'branch'
