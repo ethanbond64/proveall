@@ -142,8 +142,6 @@ function ReviewProjectPageInner({
           </div>
           {!isFilePanelCollapsed && (
             <FileTree
-              projectPath={project.path}
-              projectId={project.id}
               selectedPath={selectedFile?.path}
               onSelectFile={setSelectedFile}
             />

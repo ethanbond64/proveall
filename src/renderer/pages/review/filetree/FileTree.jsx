@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import ReviewPopup from '../components/ReviewPopup';
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
 
 // Component to render individual file with its own progress state
 function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
@@ -29,7 +30,7 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
     e.stopPropagation();
     e.preventDefault();
 
-    if (context.mode !== 'commit') return;
+    if (context.mode !== COMMIT_REVIEW_MODE) return;
 
     onShowPopup(e, file.path, fileProgress.defaultState);
   };
@@ -49,7 +50,7 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
           {fileName}
         </span>
 
-        {context.mode === 'commit' && (
+        {context.mode === COMMIT_REVIEW_MODE && (
           <>
             {/* Diff mode indicator */}
             {file.diffMode && (
@@ -90,7 +91,7 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
           </>
         )}
 
-        {context.mode === 'branch' && (
+        {context.mode === BRANCH_COMPARISON_MODE && (
           <div className="file-review-toggles">
             <span
               className={`file-review-dot ${file.state || 'gray'}`}
@@ -105,8 +106,6 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
 }
 
 function FileTree({
-  projectPath,
-  projectId,
   selectedPath,
   onSelectFile
 }) {
@@ -121,7 +120,7 @@ function FileTree({
   let filesWithIssues = [];
   let approvedFiles = [];
 
-  if (context.mode === 'branch') {
+  if (context.mode === BRANCH_COMPARISON_MODE) {
     touchedFiles.forEach(file => {
       if (file.state === 'green') {
         approvedFiles.push(file);
@@ -160,7 +159,7 @@ function FileTree({
           <div className="file-tree-empty">
             <p>No files to review</p>
           </div>
-        ) : context.mode === 'branch' ? (
+        ) : context.mode === BRANCH_COMPARISON_MODE ? (
           // Branch mode: Show categorized lists
           <>
             {/* Files with open issues */}
