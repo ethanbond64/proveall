@@ -52,21 +52,10 @@ pub fn get_review_file_system_data(
             build_commit_touched_files(path, &commit, &event)?,
             build_issues_from_event(conn, branch_context.head_event_id.as_deref(), None, &branch_context_id)?,
         ),
-        ReviewType::Branch => {
-            // If issue_id is present, get the issue's event for proper filtering
-            let issue_event = if issue_id.is_some() {
-                find_event_for_issue(conn, issue_id)
-            } else {
-                None
-            };
-
-            let event_id_to_use = issue_event.as_ref().map(|e| e.id.as_str()).or(event_id);
-
-            (
-                build_branch_touched_files(conn, path, event_id_to_use, &branch_context_id, &branch_context.base_branch, issue_id)?,
-                build_issues_from_event(conn, event_id_to_use, None, &branch_context_id)?,
-            )
-        }
+        ReviewType::Branch => (
+            build_branch_touched_files(conn, path, event_id, &branch_context_id, &branch_context.base_branch, issue_id)?,
+            build_issues_from_event(conn, event_id, None, &branch_context_id)?,
+        )
     };
 
     Ok(ReviewFileSystemDataResponse {
@@ -260,16 +249,6 @@ fn find_event_for_commit(
     })?
     .into_iter()
     .next())
-}
-
-fn fetch_single_issue(
-    conn: &mut SqliteConnection,
-    issue_id: Option<&str>,
-) -> Vec<ReviewIssueEntry> {
-    issue_id
-        .and_then(|iid| issue_repo::get(conn, iid).ok())
-        .map(|issue| vec![ReviewIssueEntry { id: issue.id, comment: issue.comment }])
-        .unwrap_or_default()
 }
 
 fn find_event_for_issue(
