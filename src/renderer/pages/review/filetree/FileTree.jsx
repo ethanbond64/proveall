@@ -112,9 +112,28 @@ function FileTree({
 }) {
   const context = useReviewContext();
   const [filePopupState, setFilePopupState] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({ issues: true, approved: true });
 
   // Extract touched files from context
   const touchedFiles = Array.from(context.touchedFiles.values());
+
+  // In branch mode, categorize files by their review state
+  let filesWithIssues = [];
+  let approvedFiles = [];
+
+  if (context.mode === 'branch') {
+    touchedFiles.forEach(file => {
+      if (file.state === 'green') {
+        approvedFiles.push(file);
+      } else {
+        filesWithIssues.push(file);
+      }
+    });
+
+    // Sort files alphabetically within each category
+    filesWithIssues.sort((a, b) => (a.name || a.path).localeCompare(b.name || b.path));
+    approvedFiles.sort((a, b) => (a.name || a.path).localeCompare(b.name || b.path));
+  }
 
   const handleShowPopup = (e, path, currentState) => {
     setFilePopupState({
@@ -127,6 +146,13 @@ function FileTree({
     });
   };
 
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
   return (
     <>
       <div className="file-tree">
@@ -134,7 +160,65 @@ function FileTree({
           <div className="file-tree-empty">
             <p>No files to review</p>
           </div>
+        ) : context.mode === 'branch' ? (
+          // Branch mode: Show categorized lists
+          <>
+            {/* Files with open issues */}
+            {filesWithIssues.length > 0 && (
+              <div className="file-tree-section">
+                <div
+                  className="file-tree-section-header"
+                  onClick={() => toggleSection('issues')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span className="tree-chevron" style={{ transform: expandedSections.issues ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                  <span className="file-tree-section-title">Files with Open Issues ({filesWithIssues.length})</span>
+                </div>
+                {expandedSections.issues && (
+                  <div className="file-tree-section-content">
+                    {filesWithIssues.map(file => (
+                      <FileTreeItem
+                        key={file.path}
+                        file={file}
+                        isSelected={selectedPath === file.path}
+                        onSelectFile={onSelectFile}
+                        onShowPopup={handleShowPopup}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Approved files */}
+            {approvedFiles.length > 0 && (
+              <div className="file-tree-section">
+                <div
+                  className="file-tree-section-header"
+                  onClick={() => toggleSection('approved')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span className="tree-chevron" style={{ transform: expandedSections.approved ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                  <span className="file-tree-section-title">Approved Files ({approvedFiles.length})</span>
+                </div>
+                {expandedSections.approved && (
+                  <div className="file-tree-section-content">
+                    {approvedFiles.map(file => (
+                      <FileTreeItem
+                        key={file.path}
+                        file={file}
+                        isSelected={selectedPath === file.path}
+                        onSelectFile={onSelectFile}
+                        onShowPopup={handleShowPopup}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         ) : (
+          // Commit mode: Show all files as before
           <>
             {touchedFiles.map(file => (
               <FileTreeItem
