@@ -42,7 +42,9 @@ function ReviewProjectPageInner({
   // Auto-select file when loading with issueId in branch mode (prefer files with issues)
   React.useEffect(() => {
     if (context.mode === 'branch' && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
-      const touchedFilesArray = Array.from(context.touchedFiles.values());
+      // Sort files alphabetically by path for consistent ordering
+      const touchedFilesArray = Array.from(context.touchedFiles.values())
+        .sort((a, b) => a.path.localeCompare(b.path));
 
       // First, try to find a file with non-green status (files tied to the issue)
       let fileToSelect = touchedFilesArray.find(file => file.state !== 'green');
