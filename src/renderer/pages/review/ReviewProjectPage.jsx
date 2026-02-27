@@ -39,16 +39,24 @@ function ReviewProjectPageInner({
       .reduce((sum, file) => sum + (file.deletions || 0), 0)
   } : null;
 
-  // Auto-select first touched file when loading with issueId in branch mode
+  // Auto-select file when loading with issueId in branch mode (prefer files with issues)
   React.useEffect(() => {
     if (context.mode === 'branch' && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
-      // Get the first touched file
-      const firstTouchedFile = Array.from(context.touchedFiles.values())[0];
-      if (firstTouchedFile) {
+      const touchedFilesArray = Array.from(context.touchedFiles.values());
+
+      // First, try to find a file with non-green status (files tied to the issue)
+      let fileToSelect = touchedFilesArray.find(file => file.state !== 'green');
+
+      // If no non-green files found, fall back to first file
+      if (!fileToSelect) {
+        fileToSelect = touchedFilesArray[0];
+      }
+
+      if (fileToSelect) {
         // Set the selected file to open it in the editor
         setSelectedFile({
-          path: firstTouchedFile.path,
-          name: firstTouchedFile.path.split('/').pop()
+          path: fileToSelect.path,
+          name: fileToSelect.path.split('/').pop()
         });
       }
     }
