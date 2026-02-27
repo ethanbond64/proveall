@@ -202,7 +202,6 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-
             let line_summary = build_branch_line_summary(conn, event_id, &file_path, &branch_context_id, issue_id)?;
             let issues = build_issues_from_event(conn, event_id, Some(&file_path), &branch_context_id)?;
             (diff, line_summary, issues)
@@ -288,8 +287,6 @@ fn build_issues_from_event(
     file_path: Option<&str>,
     branch_context_id: &str,
 ) -> Result<Vec<ReviewIssueEntry>, AppError> {
-
-    // Otherwise, return all issues for the event
     let Some(eid) = event_id else {
         return Ok(vec![]);
     };
