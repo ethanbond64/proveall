@@ -3,8 +3,9 @@ import CodeEditor from './CodeEditor';
 import DiffEditor from './DiffEditor';
 import TabBar from './TabBar';
 import { useReviewContext } from '../ReviewContext';
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
 
-function EditorPanel({ selectedFile, onActiveFileChange = () => {} }) {
+function EditorPanel({ selectedFile, onActiveFileChange = (_) => {} }) {
   const context = useReviewContext();
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
@@ -23,6 +24,20 @@ function EditorPanel({ selectedFile, onActiveFileChange = () => {} }) {
       openFileInNewTab(selectedFile);
     }
   }, [selectedFile]);
+
+  // Reload file data when issueId changes (for branch mode with issue filtering)
+  useEffect(() => {
+    if (context.mode === BRANCH_COMPARISON_MODE && tabs.length > 0) {
+      // Reload all open tabs to get updated line summaries for the new issue
+      tabs.forEach(tab => {
+        if (tab.viewMode === 'ready') {
+          context.actions.loadFileData(tab.relativePath).catch(error => {
+            console.error(`Failed to reload file ${tab.fileName} after issue change:`, error);
+          });
+        }
+      });
+    }
+  }, [context.issueId]); // Re-run when issueId changes
 
   const openFileInNewTab = async (node) => {
     const tabId = `tab-${Date.now()}`;
@@ -142,7 +157,7 @@ function EditorPanel({ selectedFile, onActiveFileChange = () => {} }) {
                   filename={activeTab.fileName}
                   path={activeTab.relativePath}
                   lineReviews={fileReviews}
-                  readOnly={context.mode !== 'commit'}
+                  readOnly={context.mode !== COMMIT_REVIEW_MODE}
                 />
               ) : (
                 <CodeEditor

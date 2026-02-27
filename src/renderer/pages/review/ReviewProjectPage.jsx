@@ -1,18 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { ReviewContextProvider, useReviewContext } from './ReviewContext';
 import FileTree from './filetree/FileTree';
 import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
-import IssueReviewControls from './controls/IssueReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import { hasIssues } from '../../utils/reviewUtils';
 import '../../styles.css';
 
 // Inner component that uses the context
 function ReviewProjectPageInner({
   project,
   projectState,
-  reviewMode = COMMIT_REVIEW_MODE,
   onNavigateBack,
   onNavigateToIssue
 }) {
@@ -40,20 +39,30 @@ function ReviewProjectPageInner({
       .reduce((sum, file) => sum + (file.deletions || 0), 0)
   } : null;
 
-  // Auto-select first touched file when loading in issue mode
+  // Auto-select file when loading with issueId in branch mode (prefer files with issues)
   React.useEffect(() => {
-    if (context.mode === 'issue' && context.touchedFiles.size > 0 && !selectedFile) {
-      // Get the first touched file
-      const firstTouchedFile = Array.from(context.touchedFiles.values())[0];
-      if (firstTouchedFile) {
+    if (context.mode === BRANCH_COMPARISON_MODE && context.issueId && context.touchedFiles.size > 0 && !selectedFile) {
+      // Sort files alphabetically by path for consistent ordering
+      const touchedFilesArray = Array.from(context.touchedFiles.values())
+        .sort((a, b) => a.path.localeCompare(b.path));
+
+      // First, try to find a file with non-green status (files tied to the issue)
+      let fileToSelect = touchedFilesArray.find(file => hasIssues(file.state));
+
+      // If no non-green files found, fall back to first file
+      if (!fileToSelect) {
+        fileToSelect = touchedFilesArray[0];
+      }
+
+      if (fileToSelect) {
         // Set the selected file to open it in the editor
         setSelectedFile({
-          path: firstTouchedFile.path,
-          name: firstTouchedFile.path.split('/').pop()
+          path: fileToSelect.path,
+          name: fileToSelect.path.split('/').pop()
         });
       }
     }
-  }, [context.mode, context.touchedFiles]); // Intentionally omit selectedFile to avoid re-triggering
+  }, [context.mode, context.issueId, context.touchedFiles]); // Intentionally omit selectedFile to avoid re-triggering
 
   return (
     <div className="project-page">
@@ -98,7 +107,7 @@ function ReviewProjectPageInner({
       </div>
 
       {/* Commit Review Component - only shows in commit-review mode */}
-      {context.mode === 'commit' && reviewMode === COMMIT_REVIEW_MODE && (
+      {context.mode === COMMIT_REVIEW_MODE && (
         <ReviewControls
           commitHash={context.commit}
           onSaveComplete={(eventId) => {
@@ -110,21 +119,8 @@ function ReviewProjectPageInner({
         />
       )}
 
-      {/* Issue Review Component - only shows in issue mode */}
-      {context.mode === 'issue' && (
-        <IssueReviewControls
-          issueId={context.issueId}
-          onResolveComplete={(eventId) => {
-            console.log('Issue resolved with event ID:', eventId);
-            if (onNavigateBack) {
-              onNavigateBack();
-            }
-          }}
-        />
-      )}
-
       {/* Branch Comparison Mode Indicator */}
-      {reviewMode === BRANCH_COMPARISON_MODE && (
+      {context.mode === BRANCH_COMPARISON_MODE && (
         <div className="branch-comparison-banner">
           <span className="mode-indicator">Branch Comparison Mode</span>
           <span className="mode-description">Viewing aggregated reviews (read-only)</span>
@@ -147,8 +143,6 @@ function ReviewProjectPageInner({
           </div>
           {!isFilePanelCollapsed && (
             <FileTree
-              projectPath={project.path}
-              projectId={project.id}
               selectedPath={selectedFile?.path}
               onSelectFile={setSelectedFile}
             />
@@ -199,12 +193,10 @@ function ReviewProjectPage({
   onNavigateBack,
   onNavigateToIssue
 }) {
-  // Determine the mode based on props
-  const mode = issueId ? 'issue' : (reviewMode === BRANCH_COMPARISON_MODE ? 'branch' : 'commit');
 
   return (
     <ReviewContextProvider
-      mode={mode}
+      mode={reviewMode}
       projectId={project?.id}
       projectPath={project?.path}
       commit={commit}
@@ -214,7 +206,6 @@ function ReviewProjectPage({
       <ReviewProjectPageInner
         project={project}
         projectState={projectState}
-        reviewMode={reviewMode}
         onNavigateBack={onNavigateBack}
         onNavigateToIssue={onNavigateToIssue}
       />

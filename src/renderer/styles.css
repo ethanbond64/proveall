@@ -188,6 +188,38 @@ body {
   padding: 4px 0;
 }
 
+/* File Tree Section Styles for Branch Mode */
+.file-tree-section {
+  margin-bottom: 8px;
+}
+
+.file-tree-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #2d2d30;
+  border-bottom: 1px solid #3e3e42;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.file-tree-section-header:hover {
+  background-color: #37373d;
+}
+
+.file-tree-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cccccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-tree-section-content {
+  padding-left: 8px;
+}
+
 .file-tree-empty {
   flex: 1;
   display: flex;

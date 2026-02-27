@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReviewContext } from '../ReviewContext';
+import {hasIssues, isApproved} from "../../../utils/reviewUtils";
 
 /**
  * Consolidated Review Popup Component
@@ -71,9 +72,9 @@ function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
     let issueRef = null;
 
     // Create new issue if needed
-    if (selectedColor !== 'green' && selectedIssue === 'new' && newIssueComment) {
+    if (hasIssues(selectedColor) && selectedIssue === 'new' && newIssueComment) {
       issueRef = context.actions.createIssue(newIssueComment);
-    } else if (selectedColor !== 'green' && selectedIssue && selectedIssue !== 'new') {
+    } else if (hasIssues(selectedColor) && selectedIssue && selectedIssue !== 'new') {
       issueRef = selectedIssue;
     }
 
@@ -93,10 +94,8 @@ function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
     onClose();
   };
 
-  const isValidSave = selectedColor === 'green' ||
-    (selectedIssue && (selectedIssue !== 'new' || newIssueComment));
-
-  const shouldShowIssueSection = selectedColor !== 'green' && isExpanded;
+  const isValidSave = isApproved(selectedColor) || (selectedIssue && (selectedIssue !== 'new' || newIssueComment));
+  const shouldShowIssueSection = hasIssues(selectedColor) && isExpanded;
 
   return (
     <div
@@ -137,7 +136,7 @@ function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
             <div className="selected-indicator">
               <span className={`color-dot ${selectedColor}`} />
               <span className="color-label">
-                {selectedColor === 'green' ? 'Approved' : selectedColor === 'yellow' ? 'Warning' : 'Issue'}
+                {isApproved(selectedColor) ? 'Approved' : selectedColor === 'yellow' ? 'Warning' : 'Issue'}
               </span>
             </div>
           </div>

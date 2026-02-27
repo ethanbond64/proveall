@@ -19,7 +19,6 @@ use crate::repositories::{
 enum ReviewType {
     Commit,
     Branch,
-    Issue,
 }
 
 impl ReviewType {
@@ -27,7 +26,6 @@ impl ReviewType {
         match s {
             "commit" => Ok(ReviewType::Commit),
             "branch" => Ok(ReviewType::Branch),
-            "issue" => Ok(ReviewType::Issue),
             _ => Err(AppError::NotFound(format!("Unknown review type: {}", s))),
         }
     }
@@ -55,17 +53,9 @@ pub fn get_review_file_system_data(
             build_issues_from_event(conn, branch_context.head_event_id.as_deref(), None, &branch_context_id)?,
         ),
         ReviewType::Branch => (
-            build_branch_touched_files(conn, path, event_id, &branch_context_id, &branch_context.base_branch)?,
+            build_branch_touched_files(conn, path, event_id, &branch_context_id, &branch_context.base_branch, issue_id)?,
             build_issues_from_event(conn, event_id, None, &branch_context_id)?,
-        ),
-        ReviewType::Issue => {
-            let issue_event = find_event_for_issue(conn, issue_id);
-            let issue_event_id = issue_event.as_ref().map(|e| e.id.as_str());
-            (
-                build_issue_touched_files(conn, issue_event_id, issue_id, &branch_context_id)?,
-                fetch_single_issue(conn, issue_id),
-            )
-        }
+        )
     };
 
     Ok(ReviewFileSystemDataResponse {
@@ -107,21 +97,30 @@ fn build_branch_touched_files(
     event_id: Option<&str>,
     branch_context_id: &str,
     base_branch: &str,
+    issue_id: Option<&str>,
 ) -> Result<Vec<TouchedFile>, AppError> {
+    // Always get all files from git diff
     let range = format!("{}..HEAD", base_branch);
     let diff_files = diff_changed_files(project_path, &[&range])?;
 
     // Build set of file paths that have a CompositeFileReviewState in the xref
-    // for the current event across all issues
-    let composite_paths: HashSet<String> =
-        if let Some(eid) = event_id {
-            event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
-                .into_iter()
-                .map(|(_, composite)| composite.relative_file_path)
-                .collect()
+    // Filter by issue_id if provided
+    let composite_paths: HashSet<String> = if let Some(eid) = event_id {
+        let composites = if let Some(iid) = issue_id {
+            // Filter by specific issue
+            event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?
         } else {
-            HashSet::new()
+            // Get all composites for this event
+            event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
         };
+
+        composites
+            .into_iter()
+            .map(|(_, composite)| composite.relative_file_path)
+            .collect()
+    } else {
+        HashSet::new()
+    };
 
     // State should be green if no composite exists for the file path, else red
     Ok(diff_files
@@ -144,31 +143,6 @@ fn build_branch_touched_files(
         .collect())
 }
 
-fn build_issue_touched_files(
-    conn: &mut SqliteConnection,
-    event_id: Option<&str>,
-    issue_id: Option<&str>,
-    branch_context_id: &str,
-) -> Result<Vec<TouchedFile>, AppError> {
-    // Files from xrefs filtered on event and issue, diff_mode is null, state is red
-    let (Some(eid), Some(iid)) = (event_id, issue_id) else {
-        return Ok(vec![]);
-    };
-
-    let composites = event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?;
-
-    let files: Vec<TouchedFile> = composites
-        .into_iter()
-        .map(|(_, c)| TouchedFile {
-            name: extract_file_name(&c.relative_file_path),
-            path: c.relative_file_path,
-            diff_mode: None,
-            state: "red".to_string(),
-        })
-        .collect();
-
-    Ok(files)
-}
 
 fn extract_file_name(file_path: &str) -> String {
     Path::new(file_path)
@@ -217,7 +191,7 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(conn, branch_context.head_event_id.as_deref(), &file_path, &branch_context_id)?;
+            let line_summary = build_branch_line_summary(conn, branch_context.head_event_id.as_deref(), &file_path, &branch_context_id, None)?;
             let issues = build_issues_from_event(conn, branch_context.head_event_id.as_deref(), Some(&file_path), &branch_context_id)?;
             (diff, line_summary, issues)
         }
@@ -228,22 +202,8 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(conn, event_id, &file_path, &branch_context_id)?;
+            let line_summary = build_branch_line_summary(conn, event_id, &file_path, &branch_context_id, issue_id)?;
             let issues = build_issues_from_event(conn, event_id, Some(&file_path), &branch_context_id)?;
-            (diff, line_summary, issues)
-        }
-        ReviewType::Issue => {
-            let issue_event = find_event_for_issue(conn, issue_id);
-            let issue_event_id = issue_event.as_ref().map(|e| e.id.as_str());
-            let issue_commit = issue_event.as_ref().and_then(|e| e.hash.as_deref()).unwrap_or(&commit);
-            let parent_ref = format!("{}^:{}", issue_commit, file_path);
-            let diff = Some(
-                run_git(path, &["show", &parent_ref])
-                    .map(|o| o.stdout)
-                    .unwrap_or_default(),
-            );
-            let line_summary = build_issue_line_summary(conn, issue_event_id, issue_id, &file_path, &branch_context_id)?;
-            let issues = fetch_single_issue(conn, issue_id);
             (diff, line_summary, issues)
         }
     };
@@ -275,40 +235,31 @@ fn find_event_for_commit(
     .next())
 }
 
-fn fetch_single_issue(
-    conn: &mut SqliteConnection,
-    issue_id: Option<&str>,
-) -> Vec<ReviewIssueEntry> {
-    issue_id
-        .and_then(|iid| issue_repo::get(conn, iid).ok())
-        .map(|issue| vec![ReviewIssueEntry { id: issue.id, comment: issue.comment }])
-        .unwrap_or_default()
-}
-
-fn find_event_for_issue(
-    conn: &mut SqliteConnection,
-    issue_id: Option<&str>,
-) -> Option<crate::models::event::Event> {
-    issue_id
-        .and_then(|iid| issue_repo::get(conn, iid).ok())
-        .and_then(|issue| event_repo::get(conn, &issue.created_event_id).ok())
-}
-
 fn build_branch_line_summary(
     conn: &mut SqliteConnection,
     event_id: Option<&str>,
     file_path: &str,
     branch_context_id: &str,
+    issue_id: Option<&str>,
 ) -> Result<Vec<LineSummaryEntry>, AppError> {
     let Some(eid) = event_id else {
         return Ok(vec![]);
     };
 
-    let xrefs_with_composites: Vec<_> =
+    // Conditionally filter by issue_id if provided
+    let xrefs_with_composites: Vec<_> = if let Some(iid) = issue_id {
+        // Filter by specific issue
+        event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?
+            .into_iter()
+            .filter(|(_, composite)| composite.relative_file_path == file_path)
+            .collect()
+    } else {
+        // Get all composites for this event
         event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
             .into_iter()
             .filter(|(_, composite)| composite.relative_file_path == file_path)
-            .collect();
+            .collect()
+    };
 
     let mut line_summary = Vec::new();
 
@@ -329,40 +280,6 @@ fn build_branch_line_summary(
     Ok(line_summary)
 }
 
-fn build_issue_line_summary(
-    conn: &mut SqliteConnection,
-    event_id: Option<&str>,
-    issue_id: Option<&str>,
-    file_path: &str,
-    branch_context_id: &str,
-) -> Result<Vec<LineSummaryEntry>, AppError> {
-    let (Some(eid), Some(iid)) = (event_id, issue_id) else {
-        return Ok(vec![]);
-    };
-
-    let composites = event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?;
-
-    for (_, composite) in &composites {
-        if composite.relative_file_path != file_path {
-            continue;
-        }
-
-        let entries: Vec<ReviewSummaryMetadataEntry> =
-            serde_json::from_str(&composite.summary_metadata).unwrap_or_default();
-
-        return Ok(entries
-            .into_iter()
-            .map(|e| LineSummaryEntry {
-                start: e.start,
-                end: e.end,
-                state: e.state,
-                issue_id: iid.to_string(),
-            })
-            .collect());
-    }
-
-    Ok(vec![])
-}
 
 fn build_issues_from_event(
     conn: &mut SqliteConnection,

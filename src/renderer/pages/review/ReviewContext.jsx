@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useCallback } from 'react';
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../constants";
+import {hasIssues} from "../../utils/reviewUtils";
 
 // Create the context
 const ReviewContext = createContext(null);
@@ -6,7 +8,7 @@ const ReviewContext = createContext(null);
 // Initial state structure
 const initialState = {
   // Core State (from getReviewFileSystemData)
-  mode: 'commit', // 'commit' | 'branch' | 'issue'
+  mode: COMMIT_REVIEW_MODE, // 'commit' | 'branch'
   projectId: null,
   projectPath: '',
   commit: '',
@@ -113,11 +115,11 @@ function reviewReducer(state, action) {
           issueRef: entry.issueId ? String(entry.issueId) : null,
         }));
 
-        // In branch/issue mode, just use backend data directly (read-only)
+        // In branch mode, just use backend data directly (read-only)
         // In commit mode, merge with existing session data
         let finalLineRanges;
-        if (state.mode === 'branch' || state.mode === 'issue') {
-          // Read-only modes: use backend data directly
+        if (state.mode === BRANCH_COMPARISON_MODE) {
+          // Read-only mode: use backend data directly
           finalLineRanges = lineRangesFromBackend;
         } else {
           // Commit mode: merge backend with session data
@@ -378,22 +380,19 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       dispatch({ type: ActionTypes.SET_LOADING, payload: true });
 
       try {
-        // Determine review type
-        const reviewType = issueId ? 'issue' : (mode === 'branch' ? 'branch' : 'commit');
-
         // Load file system data from backend
         const data = await window.electronAPI.getReviewFileSystemData(
           projectId,
           commit,
           issueId,
-          reviewType,
+          mode,
           branchContextId
         );
 
         dispatch({
           type: ActionTypes.INITIALIZE,
           payload: {
-            mode: reviewType,
+            mode,
             projectId,
             projectPath,
             commit,
@@ -416,16 +415,13 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
   const actions = useMemo(() => ({
     loadFileData: async (path) => {
       try {
-        // Determine review type based on mode
-        const reviewType = state.mode;
-
         // Call API with correct parameters
         // API expects: (projectId, commit, issueId, reviewType, relativePath, branchContextId)
         const data = await window.electronAPI.getReviewFileData(
           projectId,
           commit,
           issueId,
-          reviewType,
+          state.mode,
           path,
           branchContextId
         );
@@ -522,22 +518,20 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       dispatch({ type: ActionTypes.SET_LOADING, payload: true });
 
       try {
-        // Determine review type
-        const reviewType = state.issueId ? 'issue' : (state.mode === 'branch' ? 'branch' : 'commit');
 
         // Reload file system data from backend
         const data = await window.electronAPI.getReviewFileSystemData(
           state.projectId,
           state.commit,
           state.issueId,
-          reviewType,
+          state.mode,
           state.branchContextId
         );
 
         dispatch({
           type: ActionTypes.INITIALIZE,
           payload: {
-            mode: reviewType,
+            mode: state.mode,
             projectId: state.projectId,
             projectPath: state.projectPath,
             commit: state.commit,
@@ -597,12 +591,12 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
       try {
         // Validate based on mode
-        if (state.mode === 'issue') {
-          // In issue mode, we're primarily resolving/unresolving issues
+        if (state.mode === BRANCH_COMPARISON_MODE && state.issueId) {
+          // In branch mode with issueId, we're primarily resolving/unresolving issues
           if (resolvedIssues.length === 0 && newIssues.length === 0) {
-            throw new Error('No changes to save in issue mode');
+            throw new Error('No changes to save for this issue');
           }
-        } else if (state.mode === 'commit') {
+        } else if (state.mode === COMMIT_REVIEW_MODE) {
           // In commit mode, we don't enforce validation here
           // The save button should be disabled if not complete
           // This is just a safety check
@@ -613,7 +607,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
         }
 
         // Call the API to create the event
-        const eventType = state.mode === 'issue' ? 'resolution' : 'commit';
+        const eventType = (state.mode === BRANCH_COMPARISON_MODE && state.issueId) ? 'resolution' : 'commit';
         const eventId = await window.electronAPI.createEvent(
           state.projectId,
           state.commit,
@@ -699,7 +693,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
     // Check if all files are reviewed (for commit mode)
     const isComplete = (() => {
-      if (state.mode !== 'commit') return false;
+      if (state.mode !== COMMIT_REVIEW_MODE) return false;
 
       // Check each file's progress
       for (const [path, progress] of fileProgress) {
@@ -711,13 +705,13 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       // All non-green reviews must have issues
       for (const [path, review] of state.session.fileReviews) {
         // Check default review
-        if (review.defaultState && review.defaultState !== 'green' && !review.defaultIssueRef) {
+        if (review.defaultState && hasIssues(review.defaultState) && !review.defaultIssueRef) {
           return false;
         }
 
         // Check line range reviews
         for (const range of review.lineRanges) {
-          if (range.state !== 'green' && !range.issueRef) {
+          if (hasIssues(range.state) && !range.issueRef) {
             return false;
           }
         }
