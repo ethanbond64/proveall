@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { ReviewContextProvider, useReviewContext } from './ReviewContext';
 import FileTree from './filetree/FileTree';
 import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
-import IssueReviewControls from './controls/IssueReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
@@ -103,19 +102,6 @@ function ReviewProjectPageInner({
           commitHash={context.commit}
           onSaveComplete={(eventId) => {
             console.log('Review saved with event ID:', eventId);
-            if (onNavigateBack) {
-              onNavigateBack();
-            }
-          }}
-        />
-      )}
-
-      {/* Issue Review Component - shows in branch mode with issueId */}
-      {context.mode === 'branch' && context.issueId && (
-        <IssueReviewControls
-          issueId={context.issueId}
-          onResolveComplete={(eventId) => {
-            console.log('Issue resolved with event ID:', eventId);
             if (onNavigateBack) {
               onNavigateBack();
             }
