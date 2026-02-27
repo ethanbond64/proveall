@@ -101,29 +101,19 @@ const eventType = state.mode === 'issue' ? 'resolution' : 'commit';
 
 5. **Update `get_review_file_data` method**
    - Remove 'issue' as a valid mode option
-   - Refactor mode checks from:
-     ```typescript
-     if (mode === 'issue') {
-       // issue-specific logic with issueId filtering
-     } else if (mode === 'branch') {
-       // branch logic
-     }
-     ```
-   - To:
-     ```typescript
-     if (mode === 'branch') {
-       if (issueId) {
-         // former issue mode logic - apply issueId filtering to xref queries
-       } else {
-         // standard branch logic
-       }
-     }
-     ```
-   - Ensure all xref table queries include issueId filtering when present
+   - For Branch mode:
+     - Pass `issue_id` to `build_branch_line_summary`
+     - Pass `issue_id` to `build_issues_from_event`
+     - Remove separate Issue branch in match statement
+   - Content and diff logic remains the same (based on commit)
 
 6. **Update `get_review_file_system_data` method**
-   - Apply same refactoring pattern as `get_review_file_data`
-   - Ensure consistency in conditional logic
+   - Remove 'issue' as a valid mode option
+   - For Branch mode:
+     - Pass `issue_id` to `build_branch_touched_files`
+     - Pass `issue_id` to `build_issues_from_event`
+     - Always return ALL files from git diff
+     - File status determined by issue-filtered xref queries when issueId present
 
 7. **Update mode validation logic**
    - Find all validation code that checks for valid modes
@@ -161,10 +151,55 @@ const eventType = state.mode === 'issue' ? 'resolution' : 'commit';
 
 ## Technical Details
 
+### Example: Updated `build_branch_touched_files` Logic
+```rust
+fn build_branch_touched_files(
+    conn: &mut SqliteConnection,
+    project_path: &str,
+    event_id: Option<&str>,
+    branch_context_id: &str,
+    base_branch: &str,
+    issue_id: Option<&str>,  // NEW PARAMETER
+) -> Result<Vec<TouchedFile>, AppError> {
+    // Always get ALL files from git diff
+    let range = format!("{}..HEAD", base_branch);
+    let diff_files = diff_changed_files(project_path, &[&range])?;
+
+    // Get composites filtered by issue if provided
+    let composite_paths: HashSet<String> = if let Some(eid) = event_id {
+        let composites = if let Some(iid) = issue_id {
+            // Filter by specific issue
+            join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?
+        } else {
+            // Get all composites for this event
+            join_list_by_event(conn, eid, branch_context_id)?
+        };
+
+        composites.into_iter()
+            .map(|(_, composite)| composite.relative_file_path)
+            .collect()
+    } else {
+        HashSet::new()
+    };
+
+    // File is red if it has composites (filtered by issue if provided)
+    Ok(diff_files.into_iter().map(|f| TouchedFile {
+        name: extract_file_name(&f.path),
+        path: f.path,
+        diff_mode: Some(f.status),
+        state: if composite_paths.contains(&f.path) { "red" } else { "green" }.to_string(),
+    }).collect())
+}
+```
+
 ### Key Changes to XRef Queries
-When `mode === 'branch' && issueId` is present, add the following to xref table queries:
+When `issueId` is present in branch mode, filter xref queries:
 ```sql
-AND xref.issue_id = $issueId
+-- Without issueId (show files with ANY issues):
+WHERE xref.event_id = $eventId AND xref.branch_context_id = $branchContextId
+
+-- With issueId (show files with SPECIFIC issue):
+WHERE xref.event_id = $eventId AND xref.issue_id = $issueId AND xref.branch_context_id = $branchContextId
 ```
 
 ### Type Definition Updates
@@ -192,23 +227,44 @@ Methods will maintain the same signatures but with updated behavior:
 ## Refactoring Strategy
 
 ### Backend Strategy:
-1. **Merge Issue functions into Branch functions**:
-   - `build_issue_touched_files` → merge into `build_branch_touched_files`
-   - `build_issue_line_summary` → merge into `build_branch_line_summary`
-   - Add `issue_id: Option<&str>` parameter to branch functions
+
+#### Key Change: Branch Mode Behavior
+**Important**: When in branch mode (regardless of issueId presence):
+- Always show ALL touched files from the git diff
+- The file status (red/green) is determined by:
+  - If `issueId` is None: Check if file has ANY composites in xref
+  - If `issueId` is Some: Check if file has composites for THAT SPECIFIC issue
+
+This ensures consistent UI - users always see all branch changes, but the status indicates which files have issues (filtered by specific issue if provided).
+
+1. **Update Branch Functions with Conditional Filtering**:
+   - `build_branch_touched_files`:
+     - Always get all files from git diff
+     - Add `issue_id: Option<&str>` parameter
+     - Use conditional xref query to determine file status
+   - `build_branch_line_summary`:
+     - Add `issue_id: Option<&str>` parameter
+     - Filter line summaries by issue if provided
+   - `build_issues_from_event`:
+     - Add `issue_id: Option<&str>` parameter
+     - Return single issue if provided, all issues otherwise
 
 2. **Conditional XRef Queries**:
    ```rust
-   // When issue_id is Some(id), use:
-   join_list_by_event_and_issue(conn, event_id, issue_id, branch_context_id)
-
-   // When issue_id is None, use:
-   join_list_by_event(conn, event_id, branch_context_id)
+   // For determining file status and line summaries:
+   let composites = if let Some(issue_id) = issue_id {
+       // Filter by both event_id AND issue_id
+       join_list_by_event_and_issue(conn, event_id, issue_id, branch_context_id)?
+   } else {
+       // Filter by event_id only
+       join_list_by_event(conn, event_id, branch_context_id)?
+   };
    ```
 
 3. **Mode Handling**:
    - Remove `ReviewType::Issue` enum variant
-   - In Branch mode, check for `issue_id.is_some()` to apply issue-specific logic
+   - Remove separate `build_issue_*` functions
+   - In Branch mode, apply conditional filtering based on `issue_id.is_some()`
 
 ### Frontend Strategy:
 1. **Change mode setting**:
