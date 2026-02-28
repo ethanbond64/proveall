@@ -54,7 +54,7 @@ pub fn get_review_file_system_data(
                 conn,
                 branch_context.head_event_id.as_deref(),
                 None,
-                &branch_context_id,
+                branch_context_id,
             )?,
         ),
         ReviewType::Branch => (
@@ -62,11 +62,11 @@ pub fn get_review_file_system_data(
                 conn,
                 path,
                 event_id,
-                &branch_context_id,
+                branch_context_id,
                 &branch_context.base_branch,
                 issue_id,
             )?,
-            build_issues_from_event(conn, event_id, None, &branch_context_id)?,
+            build_issues_from_event(conn, event_id, None, branch_context_id)?,
         ),
     };
 
@@ -211,14 +211,14 @@ pub fn get_review_file_data(
                 conn,
                 branch_context.head_event_id.as_deref(),
                 &file_path,
-                &branch_context_id,
+                branch_context_id,
                 None,
             )?;
             let issues = build_issues_from_event(
                 conn,
                 branch_context.head_event_id.as_deref(),
                 Some(&file_path),
-                &branch_context_id,
+                branch_context_id,
             )?;
             (diff, line_summary, issues)
         }
@@ -229,15 +229,10 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(
-                conn,
-                event_id,
-                &file_path,
-                &branch_context_id,
-                issue_id,
-            )?;
+            let line_summary =
+                build_branch_line_summary(conn, event_id, &file_path, branch_context_id, issue_id)?;
             let issues =
-                build_issues_from_event(conn, event_id, Some(&file_path), &branch_context_id)?;
+                build_issues_from_event(conn, event_id, Some(&file_path), branch_context_id)?;
             (diff, line_summary, issues)
         }
     };
