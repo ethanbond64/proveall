@@ -120,11 +120,48 @@ awk -v version="$VERSION" -v date="$DATE" '
 mv "$TEMP_FILE" CHANGELOG.md
 
 echo -e "${GREEN}CHANGELOG.md updated${NC}"
+
+# Update package.json
+echo -e "${BLUE}Updating package.json version to $VERSION...${NC}"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+else
+    # Linux
+    sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+fi
+echo -e "${GREEN}package.json updated${NC}"
+
+# Update tauri.conf.json
+echo -e "${BLUE}Updating tauri.conf.json version to $VERSION...${NC}"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri_src/tauri.conf.json
+else
+    # Linux
+    sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri_src/tauri.conf.json
+fi
+echo -e "${GREEN}tauri.conf.json updated${NC}"
+
+# Update Cargo.toml
+echo -e "${BLUE}Updating Cargo.toml version to $VERSION...${NC}"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" tauri_src/Cargo.toml
+else
+    # Linux
+    sed -i "s/^version = \".*\"/version = \"$VERSION\"/" tauri_src/Cargo.toml
+fi
+echo -e "${GREEN}Cargo.toml updated${NC}"
+
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "1. Review and update the CHANGELOG.md with your release notes under the [$VERSION] section"
-echo "3. Commit the change and create a pull request against the main branch"
-echo "5. Once the PR is merged, the GitHub Action will automatically:"
+echo "2. Commit all version changes:"
+echo "   git add CHANGELOG.md package.json tauri_src/tauri.conf.json tauri_src/Cargo.toml"
+echo "   git commit -m \"Prepare release v$VERSION\""
+echo "3. Create a pull request against the main branch"
+echo "4. Once the PR is merged, the GitHub Action will automatically:"
 echo "   - Run tests"
 echo "   - Build binaries for supported platforms"
 echo "   - Create a GitHub release with the changelog notes"
