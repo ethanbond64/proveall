@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filter and separate files related to specific issues and open issues in the filetree.
 
 
-## [0.1.0] - 2024-02-24
+## [0.1.0] - 2026-02-24
 
 ### Added
 - Initial commit and public release.
