@@ -153,7 +153,6 @@ pub mod branch_context_repo {
 pub mod event_repo {
     use crate::models::event::{Event, NewEvent};
     impl_create!(events, Event, NewEvent);
-    impl_get!(events, Event);
     impl_list!(events, Event);
 }
 
