@@ -51,5 +51,5 @@ pub fn create_event(
         resolved_issues,
         &branch_context_id,
     )
-        .map_err(String::from)
+    .map_err(String::from)
 }

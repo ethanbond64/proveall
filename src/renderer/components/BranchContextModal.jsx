@@ -13,7 +13,7 @@ function BranchContextModal({ projectId, currentBranch, onConfirm, onCancel }) {
 
     try {
       // Create the branch context
-      const response = await window.electronAPI.createBranchContext(
+      const response = await window.backendAPI.createBranchContext(
         projectId,
         currentBranch,
         baseBranch,

@@ -4,10 +4,11 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
-use crate::utils::git::{diff_changed_files, run_git};
 use crate::db::schema::{branch_context, events};
 use crate::error::AppError;
-use crate::models::composite_file_review_state::{NewCompositeFileReviewState, ReviewSummaryMetadataEntry};
+use crate::models::composite_file_review_state::{
+    NewCompositeFileReviewState, ReviewSummaryMetadataEntry,
+};
 use crate::models::event::NewEvent;
 use crate::models::event_issue_composite_xref::EventIssueCompositeXref;
 use crate::models::issue::NewIssue;
@@ -16,6 +17,7 @@ use crate::repositories::{
     branch_context_repo, composite_file_review_state_repo, event_issue_composite_xref_repo,
     event_repo, issue_repo, project_repo, review_repo,
 };
+use crate::utils::git::{diff_changed_files, run_git};
 
 pub fn create_event(
     conn: &mut SqliteConnection,
@@ -47,29 +49,49 @@ pub fn create_event(
 
     let event = event_repo::create(
         conn,
-        NewEvent::new(project_id.to_string(), event_type.clone(), Some(commit.clone()), summary),
+        NewEvent::new(
+            project_id.to_string(),
+            event_type.clone(),
+            Some(commit.clone()),
+            summary,
+        ),
     )?;
     let new_event_id = event.id.clone();
 
     let created_issues = create_issues_with_reviews(conn, project_id, &new_event_id, new_issues)?;
 
     // Propagate unresolved xrefs from the previous event, translating line numbers for touched files
-    let previous_event = find_previous_event(conn, project_id, &commit, &event_type, &new_event_id, path)?;
+    let previous_event =
+        find_previous_event(conn, project_id, &commit, &event_type, &new_event_id, path)?;
 
     if let Some(prev_event) = &previous_event {
         propagate_previous_xrefs(
-            conn, project_id, &new_event_id, &prev_event.id,
-            &resolved_issues, path, &commit, &branch_context_id,
+            conn,
+            PropagateXrefsParams {
+                project_id,
+                new_event_id: &new_event_id,
+                prev_event_id: &prev_event.id,
+                resolved_issues: &resolved_issues,
+                project_path: path,
+                commit: &commit,
+                branch_context_id,
+            },
         )?;
     }
 
     // Create composites + xrefs for new issues' non-green reviews
-    create_composites_for_new_issues(conn, project_id, &new_event_id, &created_issues, &branch_context_id)?;
+    create_composites_for_new_issues(
+        conn,
+        project_id,
+        &new_event_id,
+        &created_issues,
+        branch_context_id,
+    )?;
 
     // Update branch_context HEAD to point to this new event
     branch_context_repo::update(
         conn,
-        &branch_context_id,
+        branch_context_id,
         branch_context::head_event_id.eq(&new_event_id),
     )?;
 
@@ -107,7 +129,11 @@ fn create_issues_with_reviews(
     for new_issue in new_issues {
         let issue = issue_repo::create(
             conn,
-            NewIssue::new(project_id.to_string(), event_id.to_string(), new_issue.comment.clone()),
+            NewIssue::new(
+                project_id.to_string(),
+                event_id.to_string(),
+                new_issue.comment.clone(),
+            ),
         )?;
 
         for review in &new_issue.reviews {
@@ -155,28 +181,35 @@ fn create_composite_with_xref(
     Ok(())
 }
 
+struct PropagateXrefsParams<'a> {
+    project_id: &'a str,
+    new_event_id: &'a str,
+    prev_event_id: &'a str,
+    resolved_issues: &'a [String],
+    project_path: &'a str,
+    commit: &'a str,
+    branch_context_id: &'a str,
+}
+
 fn propagate_previous_xrefs(
     conn: &mut SqliteConnection,
-    project_id: &str,
-    new_event_id: &str,
-    prev_event_id: &str,
-    resolved_issues: &[String],
-    project_path: &str,
-    commit: &str,
-    branch_context_id: &str,
+    params: PropagateXrefsParams,
 ) -> Result<(), AppError> {
-    let resolved_set: HashSet<&str> = resolved_issues.iter().map(|s| s.as_str()).collect();
+    let resolved_set: HashSet<&str> = params.resolved_issues.iter().map(|s| s.as_str()).collect();
 
-    let parent = format!("{}^", commit);
+    let parent = format!("{}^", params.commit);
     let touched_file_paths: HashSet<String> =
-        diff_changed_files(project_path, &[&parent, commit])
+        diff_changed_files(params.project_path, &[&parent, params.commit])
             .unwrap_or_default()
             .into_iter()
             .map(|f| f.path)
             .collect();
 
-    let prev_xrefs_with_composites =
-        event_issue_composite_xref_repo::join_list_by_event(conn, prev_event_id, branch_context_id)?;
+    let prev_xrefs_with_composites = event_issue_composite_xref_repo::join_list_by_event(
+        conn,
+        params.prev_event_id,
+        params.branch_context_id,
+    )?;
 
     for (prev_xref, prev_composite) in prev_xrefs_with_composites {
         if resolved_set.contains(prev_xref.issue_id.as_str()) {
@@ -187,24 +220,28 @@ fn propagate_previous_xrefs(
             // File was touched — translate line numbers and create new composite
             let translated_metadata = translate_composite_line_numbers(
                 &prev_composite.summary_metadata,
-                project_path,
-                commit,
+                params.project_path,
+                params.commit,
                 &prev_composite.relative_file_path,
             );
             create_composite_with_xref(
-                conn, project_id, new_event_id, &prev_xref.issue_id,
-                prev_composite.relative_file_path.clone(), translated_metadata,
-                branch_context_id,
+                conn,
+                params.project_id,
+                params.new_event_id,
+                &prev_xref.issue_id,
+                prev_composite.relative_file_path.clone(),
+                translated_metadata,
+                params.branch_context_id,
             )?;
         } else {
             // File not touched — reuse existing composite
             event_issue_composite_xref_repo::create(
                 conn,
                 EventIssueCompositeXref {
-                    event_id: new_event_id.to_string(),
+                    event_id: params.new_event_id.to_string(),
                     issue_id: prev_xref.issue_id,
                     composite_file_id: prev_xref.composite_file_id,
-                    branch_context_id: branch_context_id.to_string(),
+                    branch_context_id: params.branch_context_id.to_string(),
                 },
             )?;
         }
@@ -242,7 +279,12 @@ fn create_composites_for_new_issues(
         for (file_path, summary_entries) in entries_by_file {
             let summary_metadata = serde_json::to_string(&summary_entries).unwrap_or_default();
             create_composite_with_xref(
-                conn, project_id, event_id, issue_id, file_path, summary_metadata,
+                conn,
+                project_id,
+                event_id,
+                issue_id,
+                file_path,
+                summary_metadata,
                 branch_context_id,
             )?;
         }
@@ -303,7 +345,6 @@ fn translate_composite_line_numbers(
     current_commit: &str,
     file_path: &str,
 ) -> String {
-
     let parent = format!("{}^", current_commit);
     let diff_output = match run_git(
         project_path,
@@ -318,7 +359,8 @@ fn translate_composite_line_numbers(
         return prev_summary_metadata.to_string();
     }
 
-    let entries: Vec<ReviewSummaryMetadataEntry> = match serde_json::from_str(prev_summary_metadata) {
+    let entries: Vec<ReviewSummaryMetadataEntry> = match serde_json::from_str(prev_summary_metadata)
+    {
         Ok(e) => e,
         Err(_) => return prev_summary_metadata.to_string(),
     };
@@ -363,7 +405,7 @@ fn parse_diff_hunks(diff_output: &str) -> Vec<DiffHunk> {
 /// Count defaults to 1 when omitted (e.g. `@@ -5 +5,3 @@`).
 fn parse_hunk_header(line: &str) -> Option<DiffHunk> {
     // Strip leading "@@" and find the closing "@@"
-    let inner = line.strip_prefix("@@")?.split("@@").nth(0)?.trim();
+    let inner = line.strip_prefix("@@")?.split("@@").next()?.trim();
     let mut parts = inner.split_whitespace();
 
     let old_part = parts.next()?.strip_prefix('-')?;

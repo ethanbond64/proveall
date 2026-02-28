@@ -8,13 +8,13 @@ use crate::commands::review_commands::{
     LineSummaryEntry, ReviewFileDataResponse, ReviewFileSystemDataResponse, ReviewIssueEntry,
     TouchedFile,
 };
-use crate::utils::git::{diff_changed_files, run_git};
 use crate::db::schema::{event_issue_composite_xref, events};
 use crate::error::AppError;
 use crate::models::composite_file_review_state::ReviewSummaryMetadataEntry;
 use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, event_repo, issue_repo, project_repo,
 };
+use crate::utils::git::{diff_changed_files, run_git};
 
 enum ReviewType {
     Commit,
@@ -50,12 +50,24 @@ pub fn get_review_file_system_data(
     let (touched_files, issues) = match review_type {
         ReviewType::Commit => (
             build_commit_touched_files(path, &commit, &event)?,
-            build_issues_from_event(conn, branch_context.head_event_id.as_deref(), None, &branch_context_id)?,
+            build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                None,
+                branch_context_id,
+            )?,
         ),
         ReviewType::Branch => (
-            build_branch_touched_files(conn, path, event_id, &branch_context_id, &branch_context.base_branch, issue_id)?,
-            build_issues_from_event(conn, event_id, None, &branch_context_id)?,
-        )
+            build_branch_touched_files(
+                conn,
+                path,
+                event_id,
+                branch_context_id,
+                &branch_context.base_branch,
+                issue_id,
+            )?,
+            build_issues_from_event(conn, event_id, None, branch_context_id)?,
+        ),
     };
 
     Ok(ReviewFileSystemDataResponse {
@@ -108,7 +120,12 @@ fn build_branch_touched_files(
     let composite_paths: HashSet<String> = if let Some(eid) = event_id {
         let composites = if let Some(iid) = issue_id {
             // Filter by specific issue
-            event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?
+            event_issue_composite_xref_repo::join_list_by_event_and_issue(
+                conn,
+                eid,
+                iid,
+                branch_context_id,
+            )?
         } else {
             // Get all composites for this event
             event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
@@ -131,7 +148,7 @@ fn build_branch_touched_files(
             } else {
                 "green"
             }
-                .to_string();
+            .to_string();
 
             TouchedFile {
                 name: extract_file_name(&f.path),
@@ -142,7 +159,6 @@ fn build_branch_touched_files(
         })
         .collect())
 }
-
 
 fn extract_file_name(file_path: &str) -> String {
     Path::new(file_path)
@@ -191,8 +207,19 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(conn, branch_context.head_event_id.as_deref(), &file_path, &branch_context_id, None)?;
-            let issues = build_issues_from_event(conn, branch_context.head_event_id.as_deref(), Some(&file_path), &branch_context_id)?;
+            let line_summary = build_branch_line_summary(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                &file_path,
+                branch_context_id,
+                None,
+            )?;
+            let issues = build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                Some(&file_path),
+                branch_context_id,
+            )?;
             (diff, line_summary, issues)
         }
         ReviewType::Branch => {
@@ -202,8 +229,10 @@ pub fn get_review_file_data(
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
-            let line_summary = build_branch_line_summary(conn, event_id, &file_path, &branch_context_id, issue_id)?;
-            let issues = build_issues_from_event(conn, event_id, Some(&file_path), &branch_context_id)?;
+            let line_summary =
+                build_branch_line_summary(conn, event_id, &file_path, branch_context_id, issue_id)?;
+            let issues =
+                build_issues_from_event(conn, event_id, Some(&file_path), branch_context_id)?;
             (diff, line_summary, issues)
         }
     };
@@ -249,10 +278,15 @@ fn build_branch_line_summary(
     // Conditionally filter by issue_id if provided
     let xrefs_with_composites: Vec<_> = if let Some(iid) = issue_id {
         // Filter by specific issue
-        event_issue_composite_xref_repo::join_list_by_event_and_issue(conn, eid, iid, branch_context_id)?
-            .into_iter()
-            .filter(|(_, composite)| composite.relative_file_path == file_path)
-            .collect()
+        event_issue_composite_xref_repo::join_list_by_event_and_issue(
+            conn,
+            eid,
+            iid,
+            branch_context_id,
+        )?
+        .into_iter()
+        .filter(|(_, composite)| composite.relative_file_path == file_path)
+        .collect()
     } else {
         // Get all composites for this event
         event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
@@ -280,7 +314,6 @@ fn build_branch_line_summary(
     Ok(line_summary)
 }
 
-
 fn build_issues_from_event(
     conn: &mut SqliteConnection,
     event_id: Option<&str>,
@@ -295,19 +328,21 @@ fn build_issues_from_event(
 
     // If file_path is provided, filter by both event_id and file_path
     if let Some(fp) = file_path {
-        Ok(event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
-        .into_iter()
-        .filter(|(_, composite)| composite.relative_file_path == fp)
-        .filter_map(|(xref, _)| {
-            // Get the issue for this xref
-            issue_repo::get(conn, &xref.issue_id).ok()
-        })
-        .filter(|issue| seen.insert(issue.id.clone()))
-        .map(|issue| ReviewIssueEntry {
-            id: issue.id,
-            comment: issue.comment,
-        })
-        .collect())
+        Ok(
+            event_issue_composite_xref_repo::join_list_by_event(conn, eid, branch_context_id)?
+                .into_iter()
+                .filter(|(_, composite)| composite.relative_file_path == fp)
+                .filter_map(|(xref, _)| {
+                    // Get the issue for this xref
+                    issue_repo::get(conn, &xref.issue_id).ok()
+                })
+                .filter(|issue| seen.insert(issue.id.clone()))
+                .map(|issue| ReviewIssueEntry {
+                    id: issue.id,
+                    comment: issue.comment,
+                })
+                .collect(),
+        )
     } else {
         // Original implementation without file_path filter
         let eid_owned = eid.to_string();

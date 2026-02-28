@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 // Quick Tauri wrapper to replace window.electronAPI
-window.electronAPI = {
+window.backendAPI = {
   projectsFetch: (limit) => invoke('fetch_projects', {limit}),
   projectsOpen: (path) => invoke('open_project', { path }).then(p => ({ id: p.id })),
 

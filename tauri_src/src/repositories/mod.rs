@@ -39,7 +39,8 @@ macro_rules! impl_find_by {
             conn: &mut diesel::sqlite::SqliteConnection,
             filter: impl FnOnce(
                 crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
-            ) -> crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
+            )
+                -> crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
         ) -> Result<Option<$entity>, crate::error::AppError> {
             use diesel::prelude::*;
             let query = crate::db::schema::$table_mod::table.into_boxed();
@@ -59,7 +60,8 @@ macro_rules! impl_list {
             conn: &mut diesel::sqlite::SqliteConnection,
             filter: impl FnOnce(
                 crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
-            ) -> crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
+            )
+                -> crate::db::schema::$table_mod::BoxedQuery<'_, diesel::sqlite::Sqlite>,
         ) -> Result<Vec<$entity>, crate::error::AppError> {
             use diesel::prelude::*;
             let query = crate::db::schema::$table_mod::table.into_boxed();
@@ -124,10 +126,7 @@ macro_rules! impl_inner_join_list {
                 .into_boxed();
             // Apply caller's filter, then select both entities as a tuple
             filter(query)
-                .select((
-                    <$source_entity>::as_select(),
-                    <$join_entity>::as_select(),
-                ))
+                .select((<$source_entity>::as_select(), <$join_entity>::as_select()))
                 .load(conn)
                 .map_err(crate::error::AppError::from)
         }
@@ -153,23 +152,31 @@ pub mod branch_context_repo {
 pub mod event_repo {
     use crate::models::event::{Event, NewEvent};
     impl_create!(events, Event, NewEvent);
-    impl_get!(events, Event);
     impl_list!(events, Event);
 }
 
 pub mod issue_repo {
-    use crate::models::issue::{Issue, NewIssue};
     use crate::models::event_issue_composite_xref::EventIssueCompositeXref;
+    use crate::models::issue::{Issue, NewIssue};
     impl_create!(issues, Issue, NewIssue);
     impl_get!(issues, Issue);
-    impl_inner_join_list!(event_issue_composite_xref, issues, EventIssueCompositeXref, Issue);
+    impl_inner_join_list!(
+        event_issue_composite_xref,
+        issues,
+        EventIssueCompositeXref,
+        Issue
+    );
 }
 
 pub mod composite_file_review_state_repo {
     use crate::models::composite_file_review_state::{
         CompositeFileReviewState, NewCompositeFileReviewState,
     };
-    impl_create!(composite_file_review_state, CompositeFileReviewState, NewCompositeFileReviewState);
+    impl_create!(
+        composite_file_review_state,
+        CompositeFileReviewState,
+        NewCompositeFileReviewState
+    );
 }
 
 pub mod review_repo {
@@ -178,16 +185,26 @@ pub mod review_repo {
 }
 
 pub mod event_issue_composite_xref_repo {
-    use crate::models::event_issue_composite_xref::EventIssueCompositeXref;
     use crate::models::composite_file_review_state::CompositeFileReviewState;
-    impl_create!(event_issue_composite_xref, EventIssueCompositeXref, EventIssueCompositeXref);
-    impl_inner_join_list!(event_issue_composite_xref, composite_file_review_state, EventIssueCompositeXref, CompositeFileReviewState);
+    use crate::models::event_issue_composite_xref::EventIssueCompositeXref;
+    impl_create!(
+        event_issue_composite_xref,
+        EventIssueCompositeXref,
+        EventIssueCompositeXref
+    );
+    impl_inner_join_list!(
+        event_issue_composite_xref,
+        composite_file_review_state,
+        EventIssueCompositeXref,
+        CompositeFileReviewState
+    );
 
     pub fn join_list_by_event(
         conn: &mut diesel::sqlite::SqliteConnection,
         event_id: &str,
         branch_context_id: &str,
-    ) -> Result<Vec<(EventIssueCompositeXref, CompositeFileReviewState)>, crate::error::AppError> {
+    ) -> Result<Vec<(EventIssueCompositeXref, CompositeFileReviewState)>, crate::error::AppError>
+    {
         use diesel::prelude::*;
         let eid = event_id.to_string();
         let bcid = branch_context_id.to_string();
@@ -205,7 +222,8 @@ pub mod event_issue_composite_xref_repo {
         event_id: &str,
         issue_id: &str,
         branch_context_id: &str,
-    ) -> Result<Vec<(EventIssueCompositeXref, CompositeFileReviewState)>, crate::error::AppError> {
+    ) -> Result<Vec<(EventIssueCompositeXref, CompositeFileReviewState)>, crate::error::AppError>
+    {
         use diesel::prelude::*;
         let eid = event_id.to_string();
         let iid = issue_id.to_string();

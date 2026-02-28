@@ -45,7 +45,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     }
 
     try {
-      const state = await window.electronAPI.getProjectState(project.id, branchContextId);
+      const state = await window.backendAPI.getProjectState(project.id, branchContextId);
       setProjectState(state);
     } catch (error) {
       console.error('Failed to load project state:', error);
