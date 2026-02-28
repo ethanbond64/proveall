@@ -154,11 +154,31 @@ else
 fi
 echo -e "${GREEN}Cargo.toml updated${NC}"
 
+# Update package-lock.json
+echo -e "${BLUE}Updating package-lock.json...${NC}"
+npm install --package-lock-only --silent
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}package-lock.json updated${NC}"
+else
+    echo -e "${YELLOW}Warning: Could not update package-lock.json${NC}"
+fi
+
+# Update Cargo.lock
+echo -e "${BLUE}Updating Cargo.lock...${NC}"
+cd tauri_src
+cargo update -p proveall --quiet
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Cargo.lock updated${NC}"
+else
+    echo -e "${YELLOW}Warning: Could not update Cargo.lock${NC}"
+fi
+cd ..
+
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "1. Review and update the CHANGELOG.md with your release notes under the [$VERSION] section"
 echo "2. Commit all version changes:"
-echo "   git add CHANGELOG.md package.json tauri_src/tauri.conf.json tauri_src/Cargo.toml"
+echo "   git add CHANGELOG.md package.json package-lock.json tauri_src/tauri.conf.json tauri_src/Cargo.toml tauri_src/Cargo.lock"
 echo "   git commit -m \"Prepare release v$VERSION\""
 echo "3. Create a pull request against the main branch"
 echo "4. Once the PR is merged, the GitHub Action will automatically:"
