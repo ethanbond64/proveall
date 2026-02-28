@@ -44,7 +44,7 @@ pub fn get_review_file_system_data(
         review_type,
         &branch_context_id,
     )
-        .map_err(String::from)
+    .map_err(String::from)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -85,5 +85,5 @@ pub fn get_review_file_data(
         file_path,
         &branch_context_id,
     )
-        .map_err(String::from)
+    .map_err(String::from)
 }

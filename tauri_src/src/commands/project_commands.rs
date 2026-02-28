@@ -20,8 +20,7 @@ pub struct ProjectListItem {
 pub fn fetch_projects(state: State<DbState>, limit: i64) -> Result<Vec<ProjectListItem>, String> {
     let mut conn = state.0.lock().unwrap();
     project_repo::list(&mut conn, |q| {
-        q.order(projects::last_opened.desc())
-            .limit(limit)
+        q.order(projects::last_opened.desc()).limit(limit)
     })
     .map(|projects| {
         projects
@@ -44,10 +43,8 @@ pub struct OpenProjectResponse {
 pub fn open_project(state: State<DbState>, path: String) -> Result<OpenProjectResponse, String> {
     let mut conn = state.0.lock().unwrap();
 
-    let existing = project_repo::find_by(&mut conn, |q| {
-        q.filter(projects::path.eq(path.clone()))
-    })
-    .map_err(String::from)?;
+    let existing = project_repo::find_by(&mut conn, |q| q.filter(projects::path.eq(path.clone())))
+        .map_err(String::from)?;
 
     let id = match existing {
         Some(project) => {
@@ -149,10 +146,7 @@ pub fn create_branch_context(
 }
 
 #[tauri::command]
-pub fn get_current_branch(
-    state: State<DbState>,
-    project_id: String,
-) -> Result<String, String> {
+pub fn get_current_branch(state: State<DbState>, project_id: String) -> Result<String, String> {
     let mut conn = state.0.lock().unwrap();
     let project = project_repo::get(&mut conn, &project_id).map_err(String::from)?;
 

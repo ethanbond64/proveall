@@ -26,7 +26,10 @@ pub(crate) fn run_git(project_path: &str, args: &[&str]) -> Result<GitOutput, Ap
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
     if output.status.success() {
-        Ok(GitOutput { stdout, _stderr: stderr })
+        Ok(GitOutput {
+            stdout,
+            _stderr: stderr,
+        })
     } else {
         Err(AppError::Git(stderr))
     }
@@ -46,7 +49,10 @@ pub(crate) fn parse_name_status(raw: &str) -> Vec<DiffFile> {
 }
 
 /// Run `git diff --name-status <range_args>` and parse the output into `DiffFile` entries.
-pub fn diff_changed_files(project_path: &str, range_args: &[&str]) -> Result<Vec<DiffFile>, AppError> {
+pub fn diff_changed_files(
+    project_path: &str,
+    range_args: &[&str],
+) -> Result<Vec<DiffFile>, AppError> {
     let mut args = vec!["diff", "--name-status"];
     args.extend_from_slice(range_args);
     let output = run_git(project_path, &args)?;
@@ -54,13 +60,16 @@ pub fn diff_changed_files(project_path: &str, range_args: &[&str]) -> Result<Vec
 }
 
 pub(crate) fn parse_stat(s: &str, keyword: &str) -> u64 {
-    s.find(keyword).and_then(|pos| {
-        let before = &s[..pos];
-        before.rfind(|c: char| !c.is_ascii_digit() && c != ' ')
-            .map(|i| &before[i + 1..])
-            .unwrap_or(before)
-            .trim()
-            .parse::<u64>()
-            .ok()
-    }).unwrap_or(0)
+    s.find(keyword)
+        .and_then(|pos| {
+            let before = &s[..pos];
+            before
+                .rfind(|c: char| !c.is_ascii_digit() && c != ' ')
+                .map(|i| &before[i + 1..])
+                .unwrap_or(before)
+                .trim()
+                .parse::<u64>()
+                .ok()
+        })
+        .unwrap_or(0)
 }

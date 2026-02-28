@@ -1,10 +1,12 @@
 use std::sync::Mutex;
 
-use diesel::sqlite::SqliteConnection;
 use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
-use crate::commands::project_commands::{create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project};
+use crate::commands::project_commands::{
+    create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
+};
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
+use diesel::sqlite::SqliteConnection;
 
 mod commands;
 mod db;

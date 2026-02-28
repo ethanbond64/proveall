@@ -34,5 +34,8 @@ pub fn composite_id(project_id: &str, created_at: &NaiveDateTime) -> String {
 
 /// Deterministic: same project + branch + base_branch always produces the same ID.
 pub fn branch_context_id(project_id: &str, branch: &str, base_branch: &str) -> String {
-    hash_to_id(&format!("branch_context:{}:{}:{}", project_id, branch, base_branch))
+    hash_to_id(&format!(
+        "branch_context:{}:{}:{}",
+        project_id, branch, base_branch
+    ))
 }

@@ -23,8 +23,8 @@ pub fn get_directory(
 ) -> Result<Vec<DirectoryEntry>, String> {
     let mut conn = state.0.lock().unwrap();
 
-    let project = crate::repositories::project_repo::get(&mut conn, &project_id)
-        .map_err(String::from)?;
+    let project =
+        crate::repositories::project_repo::get(&mut conn, &project_id).map_err(String::from)?;
     // todo - confirm directory_path will be the relative path from project's root
     let full_path = Path::new(&project.path).join(&directory_path);
 

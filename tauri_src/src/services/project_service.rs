@@ -3,13 +3,13 @@ use std::collections::{HashMap, HashSet};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
-use crate::utils::git::{diff_changed_files, parse_stat, run_git};
 use crate::commands::project_commands::{
     BranchData, DiffSummary, EventEntry, IssueEntry, ProjectStateResponse,
 };
 use crate::db::schema::{event_issue_composite_xref, events};
 use crate::error::AppError;
 use crate::repositories::{branch_context_repo, event_repo, issue_repo, project_repo};
+use crate::utils::git::{diff_changed_files, parse_stat, run_git};
 
 pub fn get_project_state(
     conn: &mut SqliteConnection,
