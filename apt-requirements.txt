@@ -1,9 +1,0 @@
-# System dependencies for Debian/Ubuntu-based systems
-# Install with: xargs sudo apt-get install -y < apt-requirements.txt
-
-libglib2.0-dev
-pkg-config
-libgtk-3-dev
-libwebkit2gtk-4.0-dev
-libayatana-appindicator3-dev
-librsvg2-dev

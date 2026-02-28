@@ -14,8 +14,16 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          xargs sudo apt-get install -y < apt-requirements.txt
+          sudo apt update
+          sudo apt install libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
