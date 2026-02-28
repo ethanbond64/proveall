@@ -45,7 +45,7 @@ function FileTreeView({
     }
 
     try {
-      const children = await window.electronAPI.readDirectory(dirPath);
+      const children = await window.backendAPI.readDirectory(dirPath);
       setChildrenMap((prev) => {
         const next = new Map(prev);
         next.set(dirPath, children);

@@ -8,7 +8,7 @@ function MenuPage({ onProjectSelected }) {
   // Load recent projects on mount
   useEffect(() => {
     const loadRecentProjects = async () => {
-      const projects = await window.electronAPI.projectsFetch(5);
+      const projects = await window.backendAPI.projectsFetch(5);
       setRecentProjects(projects);
     };
     loadRecentProjects();
@@ -16,7 +16,7 @@ function MenuPage({ onProjectSelected }) {
 
   const projectSelect = async (projectPath) => {
     // Call projectsOpen to update lastOpenedAt and get the project ID
-    const projectResult = await window.electronAPI.projectsOpen(projectPath);
+    const projectResult = await window.backendAPI.projectsOpen(projectPath);
     const project = { id: projectResult.id, path: projectPath };
 
     // Notify parent component
@@ -25,7 +25,7 @@ function MenuPage({ onProjectSelected }) {
 
   const handleOpenProject = async () => {
     // Launches file picker window
-    window.electronAPI.openDirectory().then(path => {
+    window.backendAPI.openDirectory().then(path => {
       if (path) {
         projectSelect(path)
       }

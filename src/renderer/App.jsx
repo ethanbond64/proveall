@@ -26,7 +26,7 @@ function App() {
 
     try {
       // Get the current branch name
-      const branch = await window.electronAPI.getCurrentBranch(project.id);
+      const branch = await window.backendAPI.getCurrentBranch(project.id);
       setCurrentBranch(branch);
 
       // Show modal to get base branch

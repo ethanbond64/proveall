@@ -381,7 +381,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
       try {
         // Load file system data from backend
-        const data = await window.electronAPI.getReviewFileSystemData(
+        const data = await window.backendAPI.getReviewFileSystemData(
           projectId,
           commit,
           issueId,
@@ -417,7 +417,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       try {
         // Call API with correct parameters
         // API expects: (projectId, commit, issueId, reviewType, relativePath, branchContextId)
-        const data = await window.electronAPI.getReviewFileData(
+        const data = await window.backendAPI.getReviewFileData(
           projectId,
           commit,
           issueId,
@@ -497,7 +497,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
     saveResolution: async (issueId) => {
       try {
         // Call the API to create a resolution event
-        const eventId = await window.electronAPI.createEvent(
+        const eventId = await window.backendAPI.createEvent(
           state.projectId,
           state.commit,
           'resolution',  // eventType
@@ -520,7 +520,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
       try {
 
         // Reload file system data from backend
-        const data = await window.electronAPI.getReviewFileSystemData(
+        const data = await window.backendAPI.getReviewFileSystemData(
           state.projectId,
           state.commit,
           state.issueId,
@@ -608,7 +608,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
         // Call the API to create the event
         const eventType = (state.mode === BRANCH_COMPARISON_MODE && state.issueId) ? 'resolution' : 'commit';
-        const eventId = await window.electronAPI.createEvent(
+        const eventId = await window.backendAPI.createEvent(
           state.projectId,
           state.commit,
           eventType,
