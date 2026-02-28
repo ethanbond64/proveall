@@ -2,54 +2,19 @@
   "name": "proveall",
   "version": "0.0.0",
   "description": "ProveAll - Code review and verification tool",
-  "main": "src/main/main.js",
+  "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:renderer": "vite build",
-    "tauri:icon": "tauri icon",
+    "build": "vite build",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "start": "electron .",
-    "dist": "npm run build:renderer && electron-builder",
-    "dist:mac": "npm run build:renderer && electron-builder --mac",
-    "dist:win": "npm run build:renderer && electron-builder --win",
-    "dist:linux": "npm run build:renderer && electron-builder --linux"
-  },
-  "build": {
-    "appId": "com.proveall",
-    "productName": "ProveAll",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "src/main/**/*",
-      "src/renderer/dist/**/*"
-    ],
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ]
-    }
+    "tauri:icon": "tauri icon"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
     "drizzle-kit": "^0.31.8",
-    "electron": "^40.0.0",
-    "electron-builder": "^25.1.8",
     "vite": "^7.3.1"
   },
   "dependencies": {
