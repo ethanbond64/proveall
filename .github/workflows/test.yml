@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          xargs sudo apt-get install -y < apt-requirements.txt
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
