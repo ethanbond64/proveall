@@ -107,16 +107,11 @@ DATE=$(date +%Y-%m-%d)
 TEMP_FILE=$(mktemp)
 
 # Process CHANGELOG.md
-awk -v version="$VERSION" -v date="$DATE" -v last_version="$LAST_VERSION" '
+awk -v version="$VERSION" -v date="$DATE" '
 /## \[Unreleased\]/ {
     print $0
     print ""
     print "## [" version "] - " date
-    next
-}
-/^\[Unreleased\]:/ {
-    print "[Unreleased]: https://github.com/ethanbond64/proveall/compare/v" version "...HEAD"
-    print "[" version "]: https://github.com/ethanbond64/proveall/compare/v" last_version "...v" version
     next
 }
 {print}
