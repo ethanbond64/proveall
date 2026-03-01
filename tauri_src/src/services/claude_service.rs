@@ -3,15 +3,23 @@ use diesel::sqlite::SqliteConnection;
 
 use crate::db::schema::reviews;
 use crate::error::AppError;
+use crate::models::review::Review;
 use crate::repositories::{issue_repo, project_repo, review_repo};
 use crate::utils::claude::run_claude;
 use crate::utils::git::run_git;
 
-pub fn fix_issue(
+pub struct IssueContext {
+    pub project_path: String,
+    pub issue_comment: String,
+    pub reviews: Vec<Review>,
+}
+
+/// Gather all DB data needed to fix an issue. Call this while holding the DB lock.
+pub fn gather_issue_context(
     conn: &mut SqliteConnection,
     project_id: &str,
     issue_id: &str,
-) -> Result<String, AppError> {
+) -> Result<IssueContext, AppError> {
     let issue = issue_repo::get(conn, issue_id)?;
     let project = project_repo::get(conn, project_id)?;
 
@@ -20,14 +28,23 @@ pub fn fix_issue(
         q.filter(reviews::issue_id.eq(issue_id_owned))
     })?;
 
+    Ok(IssueContext {
+        project_path: project.path,
+        issue_comment: issue.comment,
+        reviews: file_reviews,
+    })
+}
+
+/// Build the prompt, run Claude, and commit. Does not need a DB connection.
+pub fn execute_fix(ctx: &IssueContext) -> Result<String, AppError> {
     let mut affected_files_section = String::new();
-    for review in &file_reviews {
+    for review in &ctx.reviews {
         let Some(ref file_path) = review.relative_file_path else {
             continue;
         };
 
         let ref_path = format!("HEAD:{}", file_path);
-        let content = run_git(&project.path, &["show", &ref_path])
+        let content = run_git(&ctx.project_path, &["show", &ref_path])
             .map(|o| o.stdout)
             .unwrap_or_default();
 
@@ -57,15 +74,15 @@ pub fn fix_issue(
          ## Affected files\n\
          {}\n\
          Fix the issue by editing the affected files. Only make changes necessary to address the issue.",
-        issue.comment, affected_files_section
+        ctx.issue_comment, affected_files_section
     );
 
-    let claude_output = run_claude(&project.path, &prompt)?;
+    let claude_output = run_claude(&ctx.project_path, &prompt)?;
 
     // Stage all changes and commit
-    run_git(&project.path, &["add", "-A"])?;
-    let commit_message = format!("fix: {}", issue.comment);
-    run_git(&project.path, &["commit", "-m", &commit_message])?;
+    run_git(&ctx.project_path, &["add", "-A"])?;
+    let commit_message = format!("fix: {}", ctx.issue_comment);
+    run_git(&ctx.project_path, &["commit", "-m", &commit_message])?;
 
     Ok(claude_output)
 }
