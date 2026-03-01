@@ -72,10 +72,9 @@ jobs:
         include:
           - args: '--target aarch64-apple-darwin'
             rust_target: 'aarch64-apple-darwin'
-            arch_label: 'Apple Silicon'
-            runner: 'macos-15'  # ARM-based runner
+            arch: 'silicon'
 
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -109,10 +108,27 @@ jobs:
         env:
           APPLE_CERT_NAME: ${{ secrets.APPLE_CERT_NAME }}
         run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "$APPLE_CERT_NAME")
+          echo "Searching for certificate in keychain..."
+
+          # Check if any certificates exist
+          CERT_COUNT=$(security find-identity -v -p codesigning build.keychain 2>/dev/null | grep -c "valid identities found" || echo "0")
+          echo "Found $CERT_COUNT certificate(s) in keychain"
+
+          # Try to find the specific certificate (case-insensitive)
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep -i "$APPLE_CERT_NAME" || true)
+
+          if [ -z "$CERT_INFO" ]; then
+            echo "Error: Certificate not found in keychain"
+            echo "Please verify that:"
+            echo "  - APPLE_CERT_NAME secret matches the certificate name exactly"
+            echo "  - The certificate was imported successfully"
+            echo "  - The certificate is valid for codesigning"
+            exit 1
+          fi
+
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-          echo "Certificate imported."
+          echo "Certificate verified successfully"
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -121,7 +137,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             tauri_src/target
-          key: ${{ matrix.runner }}-${{ matrix.rust_target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          key: macos-${{ matrix.rust_target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install frontend dependencies
         run: npm ci
