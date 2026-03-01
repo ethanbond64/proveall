@@ -64,6 +64,7 @@ jobs:
     name: Build Tauri App for macOS
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
