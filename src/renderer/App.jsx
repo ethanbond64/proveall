@@ -18,6 +18,7 @@ function App() {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [currentBranch, setCurrentBranch] = useState(null);
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
+  const [fixingIssueId, setFixingIssueId] = useState(null);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -115,6 +116,8 @@ function App() {
           branchContextId={branchContextId}
           onNavigateToReview={handleNavigateToReview}
           onNavigateBack={handleNavigateToMenu}
+          fixingIssueId={fixingIssueId}
+          setFixingIssueId={setFixingIssueId}
         />
       ) : (
         <ReviewProjectPage

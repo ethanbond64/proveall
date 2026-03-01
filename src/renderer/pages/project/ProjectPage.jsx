@@ -3,10 +3,9 @@ import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [fixingIssueId, setFixingIssueId] = useState(null);
 
   // Extract data from projectState
   const commits = projectState?.events || [];
@@ -243,9 +242,9 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                       className="fix-with-claude-btn"
                       onClick={(e) => handleFixWithClaude(e, issue)}
                       disabled={fixingIssueId === issue.id}
-                      title={fixingIssueId === issue.id ? "Claude is fixing this issue..." : "Fix with Claude"}
+                      title={fixingIssueId === issue.id ? "Claude is fixing this issue..." : "Send to Claude"}
                     >
-                      {fixingIssueId === issue.id ? 'Fixing...' : 'Fix with Claude'}
+                      {fixingIssueId === issue.id ? 'Fixing...' : 'Send to Claude'}
                     </button>
                   </div>
                 ))
