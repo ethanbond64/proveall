@@ -65,6 +65,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
     timeout-minutes: 20
+    environment: Distribution
     strategy:
       fail-fast: false
       matrix:
@@ -73,10 +74,6 @@ jobs:
             rust_target: 'aarch64-apple-darwin'
             arch_label: 'Apple Silicon'
             runner: 'macos-15'  # ARM-based runner
-          - args: '--target x86_64-apple-darwin'
-            rust_target: 'x86_64-apple-darwin'
-            arch_label: 'Intel'
-            runner: 'macos-13'  # Intel-based runner
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -177,23 +174,13 @@ jobs:
         run: |
           mkdir release-assets
 
-          # Find and move macOS artifacts with proper naming
-          # Apple Silicon (ARM64)
+          # Find and move macOS Apple Silicon artifacts with proper naming
           if [ -d "artifacts/macos-aarch64-apple-darwin" ]; then
             DMG=$(find artifacts/macos-aarch64-apple-darwin -name "*.dmg" -type f | head -1)
             TAR=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz" -type f | head -1)
 
             [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.dmg"
             [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.app.tar.gz"
-          fi
-
-          # Intel (x86_64)
-          if [ -d "artifacts/macos-x86_64-apple-darwin" ]; then
-            DMG=$(find artifacts/macos-x86_64-apple-darwin -name "*.dmg" -type f | head -1)
-            TAR=$(find artifacts/macos-x86_64-apple-darwin -name "*.app.tar.gz" -type f | head -1)
-
-            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_x64.dmg"
-            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_x64.app.tar.gz"
           fi
 
           ls -la release-assets/
