@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Run Tests
+    uses: ./.github/workflows/test.yml
+
+  check-version:
+    name: Check Version and Release Status
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+      changelog: ${{ steps.check.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse CHANGELOG and check for existing release
+        id: check
+        run: |
+          # Extract the latest version from CHANGELOG (skip Unreleased)
+          VERSION=$(grep -E "^## \[[0-9]+\.[0-9]+\.[0-9]+\]" CHANGELOG.md | head -1 | sed -E 's/## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/')
+
+          if [ -z "$VERSION" ]; then
+            echo "No version found in CHANGELOG.md"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Latest version in CHANGELOG: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Check if release already exists
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists. Skipping."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release v$VERSION does not exist. Proceeding with release."
+            echo "should_release=true" >> $GITHUB_OUTPUT
+
+            # Extract changelog for this version
+            CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/{if (/^## \[/ && !/^## \[$VERSION\]/) exit; print}" CHANGELOG.md | tail -n +2)
+
+            # Escape newlines for GitHub Actions output
+            CHANGELOG="${CHANGELOG//'%'/'%25'}"
+            CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+            CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
+
+            echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build-tauri:
+    name: Build Tauri App for macOS
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - args: '--target aarch64-apple-darwin'
+            rust_target: 'aarch64-apple-darwin'
+            arch_label: 'Apple Silicon'
+          - args: '--target x86_64-apple-darwin'
+            rust_target: 'x86_64-apple-darwin'
+            arch_label: 'Intel'
+
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Import Apple Certificates
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security import certificate.p12 -k $KEYCHAIN_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          rm certificate.p12
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tauri_src/target
+          key: macos-${{ matrix.rust_target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          cd tauri_src
+          cargo tauri build ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.rust_target }}
+          path: |
+            tauri_src/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
+            tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz
+          if-no-files-found: error
+
+  create-release:
+    name: Create GitHub Release
+    needs: [check-version, build-tauri]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir release-assets
+
+          # Move macOS artifacts to release-assets with proper naming
+          # Apple Silicon (ARM64)
+          if [ -d "artifacts/macos-aarch64-apple-darwin" ]; then
+            mv artifacts/macos-aarch64-apple-darwin/*.dmg release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.dmg || true
+            mv artifacts/macos-aarch64-apple-darwin/*.app.tar.gz release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.app.tar.gz || true
+          fi
+
+          # Intel (x86_64)
+          if [ -d "artifacts/macos-x86_64-apple-darwin" ]; then
+            mv artifacts/macos-x86_64-apple-darwin/*.dmg release-assets/ProveAll_${{ needs.check-version.outputs.version }}_x64.dmg || true
+            mv artifacts/macos-x86_64-apple-darwin/*.app.tar.gz release-assets/ProveAll_${{ needs.check-version.outputs.version }}_x64.app.tar.gz || true
+          fi
+
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check-version.outputs.version }}
+          CHANGELOG: ${{ needs.check-version.outputs.changelog }}
+        run: |
+          # Decode the changelog
+          DECODED_CHANGELOG=$(echo "$CHANGELOG" | sed 's/%0A/\n/g' | sed 's/%0D/\r/g' | sed 's/%25/%/g')
+
+          # Create release with all assets
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes "$DECODED_CHANGELOG" \
+            release-assets/*
