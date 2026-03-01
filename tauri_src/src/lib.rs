@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use crate::commands::claude_commands::fix_issue_with_claude;
 use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
 use crate::commands::project_commands::{
@@ -53,6 +54,7 @@ pub fn run() {
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
+            fix_issue_with_claude,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

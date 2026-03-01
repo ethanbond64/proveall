@@ -11,6 +11,9 @@ pub enum AppError {
     #[error("Git error: {0}")]
     Git(String),
 
+    #[error("Claude error: {0}")]
+    Claude(String),
+
     #[error("{0}")]
     NotFound(String),
 }
