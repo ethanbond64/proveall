@@ -1925,14 +1925,45 @@ body {
 
 .issue-item {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   padding: 10px 12px;
   margin-bottom: 8px;
   background-color: #2d2d30;
   border: 1px solid #3e3e42;
   border-radius: 4px;
   transition: background-color 0.2s;
+}
+
+.issue-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fix-with-claude-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+
+.fix-with-claude-btn:hover:not(:disabled) {
+  background-color: #1084d8;
+}
+
+.fix-with-claude-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .issue-item:hover {

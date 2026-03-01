@@ -6,6 +6,7 @@ import logoImage from '../../Square310x310Logo.png';
 function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [fixingIssueId, setFixingIssueId] = useState(null);
 
   // Extract data from projectState
   const commits = projectState?.events || [];
@@ -70,6 +71,21 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   useEffect(() => {
     loadProjectState();
   }, [project?.id, branchContextId]);
+
+  const handleFixWithClaude = async (e, issue) => {
+    e.stopPropagation();
+    if (fixingIssueId) return;
+    setFixingIssueId(issue.id);
+    try {
+      await window.backendAPI.fixIssueWithClaude(project.id, issue.id);
+      await loadProjectState();
+    } catch (error) {
+      console.error('Failed to fix issue with Claude:', error);
+      alert('Failed to fix issue with Claude: ' + error);
+    } finally {
+      setFixingIssueId(null);
+    }
+  };
 
   // Handle commit click - navigate to review
   const handleCommitClick = (event) => {
@@ -219,8 +235,18 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                 issues.map((issue) => (
                   //  TODO index of 0 is unsafe
                   <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
-                    <div className="issue-id">#{issue.id.substring(0, 8)}</div>
-                    <div className="issue-comment">{issue.comment}</div>
+                    <div className="issue-item-content">
+                      <div className="issue-id">#{issue.id.substring(0, 8)}</div>
+                      <div className="issue-comment">{issue.comment}</div>
+                    </div>
+                    <button
+                      className="fix-with-claude-btn"
+                      onClick={(e) => handleFixWithClaude(e, issue)}
+                      disabled={fixingIssueId === issue.id}
+                      title={fixingIssueId === issue.id ? "Claude is fixing this issue..." : "Fix with Claude"}
+                    >
+                      {fixingIssueId === issue.id ? 'Fixing...' : 'Fix with Claude'}
+                    </button>
                   </div>
                 ))
               ) : (
