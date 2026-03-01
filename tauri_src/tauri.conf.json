@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegram/nicegram-tauri/refs/heads/main/crates/tauri-utils/schema.json",
   "productName": "ProveAll",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "identifier": "com.proveall",
   "build": {
     "frontendDist": "../src/renderer/dist",
