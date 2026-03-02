@@ -19,7 +19,7 @@ window.backendAPI = {
   createEvent: (projectId, commit, eventType, newIssues, resolvedIssues, branchContextId) =>
     invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId }),
 
-  fixIssueWithClaude: (projectId, issueId) => invoke('fix_issue_with_claude', { projectId, issueId }),
+  fixIssueWithClaude: (projectId, issueId, branchContextId) => invoke('fix_issue_with_claude', { projectId, issueId, branchContextId }),
 
   getDirectory: (projectId, directoryPath) => invoke('get_directory', { projectId, directoryPath }),
   readDirectory: (path) => invoke('get_directory', { projectId: 1, directoryPath: path }), // TODO Fallback with dummy projectId

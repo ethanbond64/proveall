@@ -76,7 +76,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     if (fixingIssueId) return;
     setFixingIssueId(issue.id);
     try {
-      await window.backendAPI.fixIssueWithClaude(project.id, issue.id);
+      await window.backendAPI.fixIssueWithClaude(project.id, issue.id, branchContextId);
       await loadProjectState();
     } catch (error) {
       console.error('Failed to fix issue with Claude:', error);
