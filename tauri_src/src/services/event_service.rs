@@ -70,12 +70,14 @@ pub fn create_event(
         find_previous_event(conn, project_id, &commit, &event_type, &new_event_id, path)?;
 
     if let Some(prev_event) = &previous_event {
+        let prev_commit = prev_event.hash.as_deref().unwrap_or(&commit);
         propagate_previous_xrefs(
             conn,
             PropagateXrefsParams {
                 project_id,
                 new_event_id: &new_event_id,
                 prev_event_id: &prev_event.id,
+                prev_commit,
                 resolved_issues: &resolved_issues,
                 project_path: path,
                 commit: &commit,
@@ -190,6 +192,7 @@ struct PropagateXrefsParams<'a> {
     project_id: &'a str,
     new_event_id: &'a str,
     prev_event_id: &'a str,
+    prev_commit: &'a str,
     resolved_issues: &'a [String],
     project_path: &'a str,
     commit: &'a str,
@@ -202,13 +205,16 @@ fn propagate_previous_xrefs(
 ) -> Result<(), AppError> {
     let resolved_set: HashSet<&str> = params.resolved_issues.iter().map(|s| s.as_str()).collect();
 
-    let parent = format!("{}^", params.commit);
-    let touched_file_paths: HashSet<String> =
-        diff_changed_files(params.project_path, &[&parent, params.commit])
+    let touched_file_paths: HashSet<String> = if params.prev_commit == params.commit {
+        // Same commit (e.g. resolution events) — no file changes to translate
+        HashSet::new()
+    } else {
+        diff_changed_files(params.project_path, &[params.prev_commit, params.commit])
             .unwrap_or_default()
             .into_iter()
             .map(|f| f.path)
-            .collect();
+            .collect()
+    };
 
     let prev_xrefs_with_composites = event_issue_composite_xref_repo::join_list_by_event(
         conn,
@@ -226,6 +232,7 @@ fn propagate_previous_xrefs(
             let translated_metadata = translate_composite_line_numbers(
                 &prev_composite.summary_metadata,
                 params.project_path,
+                params.prev_commit,
                 params.commit,
                 &prev_composite.relative_file_path,
             );
@@ -347,13 +354,13 @@ fn find_previous_event(
 fn translate_composite_line_numbers(
     prev_summary_metadata: &str,
     project_path: &str,
+    prev_commit: &str,
     current_commit: &str,
     file_path: &str,
 ) -> String {
-    let parent = format!("{}^", current_commit);
     let diff_output = match run_git(
         project_path,
-        &["diff", &parent, current_commit, "--", file_path],
+        &["diff", prev_commit, current_commit, "--", file_path],
     ) {
         Ok(o) => o.stdout,
         Err(_) => return prev_summary_metadata.to_string(),
