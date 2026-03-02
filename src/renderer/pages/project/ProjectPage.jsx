@@ -76,11 +76,11 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     if (fixingIssueId) return;
     setFixingIssueId(issue.id);
     try {
-      await window.backendAPI.fixIssueWithClaude(project.id, issue.id, branchContextId);
+      await window.backendAPI.fixIssue(project.id, issue.id, branchContextId);
       await loadProjectState();
     } catch (error) {
-      console.error('Failed to fix issue with Claude:', error);
-      alert('Failed to fix issue with Claude: ' + error);
+      console.error('Failed to fix issue:', error);
+      alert('Failed to fix issue: ' + error);
     } finally {
       setFixingIssueId(null);
     }

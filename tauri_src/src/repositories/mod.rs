@@ -182,7 +182,6 @@ pub mod composite_file_review_state_repo {
 pub mod review_repo {
     use crate::models::review::{NewReview, Review};
     impl_create!(reviews, Review, NewReview);
-    impl_list!(reviews, Review);
 }
 
 pub mod event_issue_composite_xref_repo {

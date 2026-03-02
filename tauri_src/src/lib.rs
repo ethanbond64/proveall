@@ -1,12 +1,13 @@
 use std::sync::Mutex;
 
-use crate::commands::claude_commands::fix_issue_with_claude;
 use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
+use crate::commands::llm_commands::fix_issue;
 use crate::commands::project_commands::{
     create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
 };
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
+use crate::utils::llm::{ClaudeProvider, LlmProvider};
 use diesel::sqlite::SqliteConnection;
 
 mod commands;
@@ -18,6 +19,7 @@ mod services;
 mod utils;
 
 pub struct DbState(pub Mutex<SqliteConnection>);
+pub struct LlmState(pub Box<dyn LlmProvider + Send + Sync>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -44,6 +46,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
+        .manage(LlmState(Box::new(ClaudeProvider)))
         .invoke_handler(tauri::generate_handler![
             fetch_projects,
             open_project,
@@ -54,7 +57,7 @@ pub fn run() {
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
-            fix_issue_with_claude,
+            fix_issue,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

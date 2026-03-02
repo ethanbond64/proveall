@@ -7,8 +7,8 @@ use crate::models::composite_file_review_state::{
 use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, issue_repo, project_repo,
 };
-use crate::utils::claude::run_claude;
 use crate::utils::git::run_git;
+use crate::utils::llm::LlmProvider;
 
 pub struct IssueContext {
     pub project_path: String,
@@ -48,8 +48,8 @@ pub fn gather_issue_context(
     })
 }
 
-/// Build the prompt, run Claude, and commit. Does not need a DB connection.
-pub fn execute_fix(ctx: &IssueContext) -> Result<String, AppError> {
+/// Build the prompt, run the LLM, and commit. Does not need a DB connection.
+pub fn execute_fix(ctx: &IssueContext, provider: &dyn LlmProvider) -> Result<String, AppError> {
     let mut affected_files = String::new();
     for composite in &ctx.composites {
         affected_files.push_str(&format!("### {}\n", composite.relative_file_path));
@@ -75,10 +75,10 @@ pub fn execute_fix(ctx: &IssueContext) -> Result<String, AppError> {
         ctx.issue_comment, affected_files
     );
 
-    let claude_output = run_claude(&ctx.project_path, &prompt)?;
+    let llm_output = provider.run(&ctx.project_path, &prompt)?;
 
     run_git(&ctx.project_path, &["add", "-A"])?;
     run_git(&ctx.project_path, &["commit", "-m", &format!("fix: {}", ctx.issue_comment)])?;
 
-    Ok(claude_output)
+    Ok(llm_output)
 }
