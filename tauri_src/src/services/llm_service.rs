@@ -78,7 +78,10 @@ pub fn execute_fix(ctx: &IssueContext, provider: &dyn LlmProvider) -> Result<Str
     let llm_output = provider.run(&ctx.project_path, &prompt)?;
 
     run_git(&ctx.project_path, &["add", "-A"])?;
-    run_git(&ctx.project_path, &["commit", "-m", &format!("fix: {}", ctx.issue_comment)])?;
+    run_git(
+        &ctx.project_path,
+        &["commit", "-m", &format!("fix: {}", ctx.issue_comment)],
+    )?;
 
     Ok(llm_output)
 }
