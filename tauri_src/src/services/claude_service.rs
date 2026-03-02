@@ -50,29 +50,19 @@ pub fn gather_issue_context(
 
 /// Build the prompt, run Claude, and commit. Does not need a DB connection.
 pub fn execute_fix(ctx: &IssueContext) -> Result<String, AppError> {
-    let mut affected_files_section = String::new();
+    let mut affected_files = String::new();
     for composite in &ctx.composites {
-        let file_path = &composite.relative_file_path;
-        let full_path = std::path::Path::new(&ctx.project_path).join(file_path);
-        let content = std::fs::read_to_string(&full_path).unwrap_or_default();
-
-        affected_files_section.push_str(&format!("### File: {}\n", file_path));
+        affected_files.push_str(&format!("### {}\n", composite.relative_file_path));
 
         let entries: Vec<ReviewSummaryMetadataEntry> =
             serde_json::from_str(&composite.summary_metadata).unwrap_or_default();
-
-        if !entries.is_empty() {
-            affected_files_section.push_str("Review state:\n");
-            for entry in &entries {
-                affected_files_section.push_str(&format!(
-                    "- Lines {}-{}: {}\n",
-                    entry.start, entry.end, entry.state
-                ));
-            }
-            affected_files_section.push('\n');
+        for entry in &entries {
+            affected_files.push_str(&format!(
+                "- Lines {}-{}: {}\n",
+                entry.start, entry.end, entry.state
+            ));
         }
-
-        affected_files_section.push_str(&format!("```\n{}\n```\n\n", content));
+        affected_files.push('\n');
     }
 
     let prompt = format!(
@@ -80,17 +70,15 @@ pub fn execute_fix(ctx: &IssueContext) -> Result<String, AppError> {
          ## Issue\n\
          {}\n\n\
          ## Affected files\n\
-         {}\n\
+         {}\
          Fix the issue by editing the affected files. Only make changes necessary to address the issue.",
-        ctx.issue_comment, affected_files_section
+        ctx.issue_comment, affected_files
     );
 
     let claude_output = run_claude(&ctx.project_path, &prompt)?;
 
-    // Stage all changes and commit
     run_git(&ctx.project_path, &["add", "-A"])?;
-    let commit_message = format!("fix: {}", ctx.issue_comment);
-    run_git(&ctx.project_path, &["commit", "-m", &commit_message])?;
+    run_git(&ctx.project_path, &["commit", "-m", &format!("fix: {}", ctx.issue_comment)])?;
 
     Ok(claude_output)
 }
