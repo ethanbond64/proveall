@@ -160,6 +160,7 @@ pub mod issue_repo {
     use crate::models::issue::{Issue, NewIssue};
     impl_create!(issues, Issue, NewIssue);
     impl_get!(issues, Issue);
+    impl_update!(issues, Issue);
     impl_inner_join_list!(
         event_issue_composite_xref,
         issues,

@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
-use crate::db::schema::{branch_context, events};
+use crate::db::schema::{branch_context, events, issues};
 use crate::error::AppError;
 use crate::models::composite_file_review_state::{
     NewCompositeFileReviewState, ReviewSummaryMetadataEntry,
@@ -59,6 +59,11 @@ pub fn create_event(
     let new_event_id = event.id.clone();
 
     let created_issues = create_issues_with_reviews(conn, project_id, &new_event_id, new_issues)?;
+
+    // Mark resolved issues with the resolution event ID
+    for issue_id in &resolved_issues {
+        issue_repo::update(conn, issue_id, issues::resolved_event_id.eq(Some(&new_event_id)))?;
+    }
 
     // Propagate unresolved xrefs from the previous event, translating line numbers for touched files
     let previous_event =
