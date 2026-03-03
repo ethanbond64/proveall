@@ -20,7 +20,7 @@ pub fn default_llm_config() -> LlmConfig {
     }
 }
 
-pub fn run_llm(config: &LlmConfig, project_path: &str, prompt: &str) -> Result<String, AppError> {
+pub fn call_llm(config: &LlmConfig, project_path: &str, prompt: &str) -> Result<String, AppError> {
     let args: Vec<&str> = config.args.split_whitespace().collect();
 
     let mut child = Command::new(&config.command)

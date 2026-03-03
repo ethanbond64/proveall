@@ -1992,26 +1992,11 @@ body {
   min-width: 0;
 }
 
-.fix-with-llm-btn {
-  flex-shrink: 0;
+.btn-sm {
   padding: 4px 10px;
   font-size: 11px;
-  background-color: #0078d4;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
+  flex-shrink: 0;
   white-space: nowrap;
-  transition: background-color 0.2s;
-}
-
-.fix-with-llm-btn:hover:not(:disabled) {
-  background-color: #1084d8;
-}
-
-.fix-with-llm-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .issue-item:hover {

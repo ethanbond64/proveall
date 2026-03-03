@@ -239,7 +239,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                       <div className="issue-comment">{issue.comment}</div>
                     </div>
                     <button
-                      className="fix-with-llm-btn"
+                      className="btn-primary btn-sm"
                       onClick={(e) => handleFixWithLLM(e, issue)}
                       disabled={fixingIssueId === issue.id}
                       title={fixingIssueId === issue.id ? "Fixing this issue..." : "Fix with LLM"}

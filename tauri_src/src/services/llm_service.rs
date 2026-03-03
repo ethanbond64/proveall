@@ -8,7 +8,7 @@ use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, issue_repo, project_repo,
 };
 use crate::utils::git::run_git;
-use crate::utils::llm::{run_llm, LlmConfig};
+use crate::utils::llm::{call_llm, LlmConfig};
 
 pub struct IssueContext {
     pub project_path: String,
@@ -75,7 +75,7 @@ pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, App
         ctx.issue_comment, affected_files
     );
 
-    let llm_output = run_llm(config, &ctx.project_path, &prompt)?;
+    let llm_output = call_llm(config, &ctx.project_path, &prompt)?;
 
     run_git(&ctx.project_path, &["add", "-A"])?;
     run_git(
