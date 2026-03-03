@@ -1,23 +1,44 @@
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::{Arc, RwLock};
+
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmConfig {
+    pub command: String,
+    pub args: String,
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            command: "claude".to_string(),
+            args: "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob"
+                .to_string(),
+        }
+    }
+}
 
 pub trait LlmProvider {
     fn run(&self, project_path: &str, prompt: &str) -> Result<String, AppError>;
 }
 
-pub struct ClaudeProvider;
+pub struct ConfigurableProvider {
+    pub config: Arc<RwLock<LlmConfig>>,
+}
 
-impl LlmProvider for ClaudeProvider {
+impl LlmProvider for ConfigurableProvider {
     fn run(&self, project_path: &str, prompt: &str) -> Result<String, AppError> {
-        let mut child = Command::new("claude")
-            .args([
-                "--print",
-                "--dangerously-skip-permissions",
-                "--allowedTools",
-                "Edit,Read,Write,Grep,Glob",
-            ])
+        let config = self.config.read().unwrap().clone();
+
+        let args: Vec<&str> = config.args.split_whitespace().collect();
+
+        let mut child = Command::new(&config.command)
+            .args(&args)
             .current_dir(project_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -38,4 +59,24 @@ impl LlmProvider for ClaudeProvider {
             Err(AppError::Llm(stderr))
         }
     }
+}
+
+fn settings_path(app_data_dir: &PathBuf) -> PathBuf {
+    app_data_dir.join("settings.json")
+}
+
+pub fn load_settings(app_data_dir: &PathBuf) -> LlmConfig {
+    let path = settings_path(app_data_dir);
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
+        Err(_) => LlmConfig::default(),
+    }
+}
+
+pub fn save_settings(app_data_dir: &PathBuf, config: &LlmConfig) -> Result<(), AppError> {
+    let path = settings_path(app_data_dir);
+    let json = serde_json::to_string_pretty(config)
+        .map_err(|e| AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+    std::fs::write(&path, json)?;
+    Ok(())
 }

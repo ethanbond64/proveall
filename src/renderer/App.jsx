@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import MenuPage from './pages/menu/MenuPage';
 import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
-import SettingsPage from './pages/SettingsPage';
+import SettingsPage from './pages/settings/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import './styles.css';
@@ -19,6 +19,7 @@ function App() {
   const [currentBranch, setCurrentBranch] = useState(null);
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
   const [fixingIssueId, setFixingIssueId] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -102,9 +103,14 @@ function App() {
         <div className="header-left">
         {/* TODO logo and name */}
         </div>
+        <div className="header-right">
+          <button className="gear-btn" onClick={() => setShowSettings(true)} title="Settings">&#9881;</button>
+        </div>
       </header>
 
-      {!currentProject ? (
+      {showSettings ? (
+        <SettingsPage onBack={() => setShowSettings(false)} />
+      ) : !currentProject ? (
         <MenuPage
           onProjectSelected={openProject}
         />

@@ -1146,16 +1146,57 @@ body {
   background-color: #1e1e1e;
 }
 
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .settings-page-title {
   font-size: 20px;
   font-weight: 500;
   color: #ffffff;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
-.settings-page-subtitle {
-  font-size: 14px;
+.settings-section {
+  background-color: #252526;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 20px;
+  max-width: 600px;
+}
+
+.settings-section .form-group {
+  margin-bottom: 14px;
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #cccccc;
+  margin-bottom: 16px;
+}
+
+.settings-status {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #4ec9b0;
+}
+
+.gear-btn {
+  background: none;
+  border: none;
   color: #888;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.gear-btn:hover {
+  color: #e0e0e0;
 }
 
 /* Recent Projects Styles */

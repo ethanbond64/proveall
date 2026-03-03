@@ -25,4 +25,7 @@ window.backendAPI = {
   readDirectory: (path) => invoke('get_directory', { projectId: 1, directoryPath: path }), // TODO Fallback with dummy projectId
 
   openDirectory: () => open({ directory: true, multiple: false }),
+
+  getLlmSettings: () => invoke('get_llm_settings'),
+  updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
 };
