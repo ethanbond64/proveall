@@ -71,7 +71,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  const handleFixWithClaude = async (e, issue) => {
+  const handleFixWithLLM = async (e, issue) => {
     e.stopPropagation();
     if (fixingIssueId) return;
     setFixingIssueId(issue.id);
@@ -239,12 +239,12 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                       <div className="issue-comment">{issue.comment}</div>
                     </div>
                     <button
-                      className="fix-with-claude-btn"
-                      onClick={(e) => handleFixWithClaude(e, issue)}
+                      className="fix-with-llm-btn"
+                      onClick={(e) => handleFixWithLLM(e, issue)}
                       disabled={fixingIssueId === issue.id}
-                      title={fixingIssueId === issue.id ? "Claude is fixing this issue..." : "Send to Claude"}
+                      title={fixingIssueId === issue.id ? "Fixing this issue..." : "Fix with LLM"}
                     >
-                      {fixingIssueId === issue.id ? 'Fixing...' : 'Send to Claude'}
+                      {fixingIssueId === issue.id ? 'Fixing...' : 'Fix with LLM'}
                     </button>
                   </div>
                 ))

@@ -1992,7 +1992,7 @@ body {
   min-width: 0;
 }
 
-.fix-with-claude-btn {
+.fix-with-llm-btn {
   flex-shrink: 0;
   padding: 4px 10px;
   font-size: 11px;
@@ -2005,11 +2005,11 @@ body {
   transition: background-color 0.2s;
 }
 
-.fix-with-claude-btn:hover:not(:disabled) {
+.fix-with-llm-btn:hover:not(:disabled) {
   background-color: #1084d8;
 }
 
-.fix-with-claude-btn:disabled {
+.fix-with-llm-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
