@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import TerminalDrawer from '../review/terminal/TerminalDrawer';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
@@ -259,6 +260,9 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
           </div>
         </div>
       </div>
+
+      {/* Terminal Drawer */}
+      <TerminalDrawer projectPath={project?.path} />
     </div>
   );
 }
