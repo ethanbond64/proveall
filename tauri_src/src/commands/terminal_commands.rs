@@ -1,5 +1,5 @@
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize, SlavePty};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -7,7 +7,7 @@ pub struct PtyState {
     pub master: Arc<AsyncMutex<Box<dyn MasterPty + Send>>>,
     pub slave: Arc<AsyncMutex<Box<dyn SlavePty + Send>>>,
     pub writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
-    pub reader: Arc<AsyncMutex<BufReader<Box<dyn Read + Send>>>>,
+    pub reader: Arc<AsyncMutex<Box<dyn Read + Send>>>,
 }
 
 #[tauri::command]
@@ -46,14 +46,23 @@ pub async fn async_write_to_pty(
 
 #[tauri::command]
 pub async fn async_read_from_pty(state: tauri::State<'_, PtyState>) -> Result<String, String> {
-    let mut reader = state.reader.lock().await;
+    // Offload the blocking read to a dedicated thread so we don't
+    // block the tokio async runtime. This is the key fix — fill_buf
+    // on a PTY reader blocks until data arrives, which would starve
+    // other async tasks (like writing keystrokes).
+    let reader = state.reader.clone();
 
-    let buf = reader.fill_buf().map_err(|e| e.to_string())?;
-    let len = buf.len();
-    let result = String::from_utf8_lossy(buf).to_string();
-    reader.consume(len);
-
-    Ok(result)
+    tokio::task::spawn_blocking(move || {
+        let mut reader = reader.blocking_lock();
+        let mut buf = [0u8; 8192];
+        match reader.read(&mut buf) {
+            Ok(0) => Ok(String::new()),
+            Ok(n) => Ok(String::from_utf8_lossy(&buf[..n]).to_string()),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -98,6 +107,6 @@ pub fn create_pty_state() -> PtyState {
         master: Arc::new(AsyncMutex::new(pair.master)),
         slave: Arc::new(AsyncMutex::new(pair.slave)),
         writer: Arc::new(AsyncMutex::new(writer)),
-        reader: Arc::new(AsyncMutex::new(BufReader::new(reader))),
+        reader: Arc::new(AsyncMutex::new(reader)),
     }
 }
