@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-02
+
+### Added
+- Automatic issue resolution. Users can now send issues to an LLM to generate a fix.
+  - Claude by default, configurable via settings                                                                                      
+- Issue resolution events to the event log on the project page.
+
 ## [0.2.0] - 2026-03-01
 
 ### Added
