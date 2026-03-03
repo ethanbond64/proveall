@@ -5,6 +5,7 @@ import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import TerminalDrawer from './terminal/TerminalDrawer';
 import { hasIssues } from '../../utils/reviewUtils';
 import '../../styles.css';
 
@@ -178,6 +179,9 @@ function ReviewProjectPageInner({
           )}
         </div>
       </div>
+
+      {/* Terminal Drawer */}
+      <TerminalDrawer projectPath={project?.path} />
     </div>
   );
 }

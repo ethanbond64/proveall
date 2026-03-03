@@ -11,6 +11,9 @@ use crate::commands::review_commands::{get_review_file_data, get_review_file_sys
 use crate::commands::settings_commands::{
     get_llm_settings, reset_llm_settings, update_llm_settings,
 };
+use crate::commands::terminal_commands::{
+    async_create_shell, async_read_from_pty, async_resize_pty, async_write_to_pty, create_pty_state,
+};
 use crate::utils::llm::{load_settings, LlmConfig};
 use diesel::sqlite::SqliteConnection;
 
@@ -64,6 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
         .manage(llm_state)
+        .manage(create_pty_state())
         .invoke_handler(tauri::generate_handler![
             fetch_projects,
             open_project,
@@ -78,6 +82,10 @@ pub fn run() {
             get_llm_settings,
             update_llm_settings,
             reset_llm_settings,
+            async_create_shell,
+            async_write_to_pty,
+            async_read_from_pty,
+            async_resize_pty,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

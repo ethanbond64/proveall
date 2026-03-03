@@ -2837,3 +2837,66 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ── Terminal Drawer ── */
+
+.terminal-drawer-wrapper {
+  flex-shrink: 0;
+}
+
+.terminal-drawer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 12px;
+  background: #252525;
+  border: none;
+  border-top: 1px solid #333;
+  color: #999;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.terminal-drawer-toggle:hover {
+  background: #2a2a2a;
+  color: #ccc;
+}
+
+.terminal-toggle-icon {
+  font-size: 10px;
+}
+
+.terminal-drawer {
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  border-top: 1px solid #333;
+  overflow: hidden;
+}
+
+.terminal-drawer-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.terminal-drawer-resize-handle:hover {
+  background: #4ec9b0;
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+  overflow-y: auto;
+}
