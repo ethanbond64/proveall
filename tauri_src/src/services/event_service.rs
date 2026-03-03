@@ -62,7 +62,11 @@ pub fn create_event(
 
     // Mark resolved issues with the resolution event ID
     for issue_id in &resolved_issues {
-        issue_repo::update(conn, issue_id, issues::resolved_event_id.eq(Some(&new_event_id)))?;
+        issue_repo::update(
+            conn,
+            issue_id,
+            issues::resolved_event_id.eq(Some(&new_event_id)),
+        )?;
     }
 
     // Propagate unresolved xrefs from the previous event, translating line numbers for touched files
