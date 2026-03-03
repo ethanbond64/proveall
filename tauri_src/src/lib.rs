@@ -8,8 +8,10 @@ use crate::commands::project_commands::{
     create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
 };
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
-use crate::commands::settings_commands::{get_llm_settings, update_llm_settings};
-use crate::utils::llm::{load_settings, ConfigurableProvider, LlmConfig, LlmProvider};
+use crate::commands::settings_commands::{
+    get_llm_settings, reset_llm_settings, update_llm_settings,
+};
+use crate::utils::llm::{load_settings, LlmConfig};
 use diesel::sqlite::SqliteConnection;
 
 mod commands;
@@ -21,9 +23,8 @@ mod services;
 mod utils;
 
 pub struct DbState(pub Mutex<SqliteConnection>);
-pub struct LlmState(pub Box<dyn LlmProvider + Send + Sync>);
 
-pub struct LlmConfigState {
+pub struct LlmState {
     pub config: Arc<RwLock<LlmConfig>>,
     pub app_data_dir: PathBuf,
 }
@@ -54,20 +55,15 @@ pub fn run() {
     let llm_config = load_settings(&app_data_dir);
     let config_arc = Arc::new(RwLock::new(llm_config));
 
-    let provider = ConfigurableProvider {
-        config: Arc::clone(&config_arc),
-    };
-
-    let config_state = LlmConfigState {
-        config: Arc::clone(&config_arc),
+    let llm_state = LlmState {
+        config: config_arc,
         app_data_dir: app_data_dir.clone(),
     };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
-        .manage(LlmState(Box::new(provider)))
-        .manage(config_state)
+        .manage(llm_state)
         .invoke_handler(tauri::generate_handler![
             fetch_projects,
             open_project,
@@ -81,6 +77,7 @@ pub fn run() {
             fix_issue,
             get_llm_settings,
             update_llm_settings,
+            reset_llm_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

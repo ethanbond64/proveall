@@ -1,7 +1,6 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -13,51 +12,37 @@ pub struct LlmConfig {
     pub args: String,
 }
 
-impl Default for LlmConfig {
-    fn default() -> Self {
-        Self {
-            command: "claude".to_string(),
-            args: "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob"
-                .to_string(),
-        }
+pub fn default_llm_config() -> LlmConfig {
+    LlmConfig {
+        command: "claude".to_string(),
+        args: "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob"
+            .to_string(),
     }
 }
 
-pub trait LlmProvider {
-    fn run(&self, project_path: &str, prompt: &str) -> Result<String, AppError>;
-}
+pub fn run_llm(config: &LlmConfig, project_path: &str, prompt: &str) -> Result<String, AppError> {
+    let args: Vec<&str> = config.args.split_whitespace().collect();
 
-pub struct ConfigurableProvider {
-    pub config: Arc<RwLock<LlmConfig>>,
-}
+    let mut child = Command::new(&config.command)
+        .args(&args)
+        .current_dir(project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
-impl LlmProvider for ConfigurableProvider {
-    fn run(&self, project_path: &str, prompt: &str) -> Result<String, AppError> {
-        let config = self.config.read().unwrap().clone();
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(prompt.as_bytes())?;
+    }
 
-        let args: Vec<&str> = config.args.split_whitespace().collect();
+    let output = child.wait_with_output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-        let mut child = Command::new(&config.command)
-            .args(&args)
-            .current_dir(project_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(prompt.as_bytes())?;
-        }
-
-        let output = child.wait_with_output()?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-
-        if output.status.success() {
-            Ok(stdout)
-        } else {
-            Err(AppError::Llm(stderr))
-        }
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(AppError::Llm(stderr))
     }
 }
 
@@ -68,8 +53,8 @@ fn settings_path(app_data_dir: &PathBuf) -> PathBuf {
 pub fn load_settings(app_data_dir: &PathBuf) -> LlmConfig {
     let path = settings_path(app_data_dir);
     match std::fs::read_to_string(&path) {
-        Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
-        Err(_) => LlmConfig::default(),
+        Ok(contents) => serde_json::from_str(&contents).unwrap_or_else(|_| default_llm_config()),
+        Err(_) => default_llm_config(),
     }
 }
 

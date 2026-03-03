@@ -23,5 +23,6 @@ pub async fn fix_issue(
     };
 
     // Run LLM + commit without holding the DB lock
-    crate::services::llm_service::execute_fix(&ctx, &*llm_state.0).map_err(String::from)
+    let config = llm_state.config.read().unwrap().clone();
+    crate::services::llm_service::execute_fix(&ctx, &config).map_err(String::from)
 }

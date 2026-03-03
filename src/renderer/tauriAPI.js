@@ -28,4 +28,5 @@ window.backendAPI = {
 
   getLlmSettings: () => invoke('get_llm_settings'),
   updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
+  resetLlmSettings: () => invoke('reset_llm_settings'),
 };
