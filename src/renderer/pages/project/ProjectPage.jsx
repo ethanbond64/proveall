@@ -128,9 +128,10 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               <div className="empty-state">Loading...</div>
             ) : commits.length > 0 ? (
               commits.map((event, index) => {
+                const isResolution = event.event_type === 'resolution';
                 const isReviewed = event.id !== null;
                 // Check if this is the next commit to review
-                const isNextToReview = oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit;
+                const isNextToReview = !isResolution && oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit;
                 // Can only click if it's the next commit to review
                 const canReview = isNextToReview;
 
@@ -143,12 +144,15 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                   >
                     <div className="commit-item-header">
                       <div className="commit-hash">{event.commit?.substring(0, 7)}</div>
+                      {isResolution && (
+                        <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>RESOLUTION</div>
+                      )}
                       {isNextToReview && (
                         <div className="commit-next-badge" title="Next commit to review">
                           NEXT
                         </div>
                       )}
-                      {isReviewed && (
+                      {isReviewed && !isResolution && (
                         <div
                           className={`commit-review-status green`}
                           title="Reviewed"

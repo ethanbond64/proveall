@@ -119,38 +119,43 @@ fn build_event_entries(
     let commit_hashes: Vec<String> = commits.iter().map(|c| c.hash.clone()).collect();
 
     let project_id_owned = project_id.to_string();
-    let events_by_hash: HashMap<String, _> = event_repo::list(conn, |q| {
+    let mut events_by_hash: HashMap<String, Vec<_>> = HashMap::new();
+    for e in event_repo::list(conn, |q| {
         q.filter(
             events::project_id
                 .eq(project_id_owned)
                 .and(events::hash.eq_any(commit_hashes)),
         )
-    })?
-    .into_iter()
-    .filter_map(|e| e.hash.clone().map(|h| (h, e)))
-    .collect();
+    })? {
+        if let Some(h) = e.hash.clone() {
+            events_by_hash.entry(h).or_default().push(e);
+        }
+    }
 
     let entries: Vec<EventEntry> = commits
         .iter()
-        .map(|commit| {
-            if let Some(ev) = events_by_hash.get(&commit.hash) {
-                EventEntry {
-                    id: Some(ev.id.clone()),
-                    event_type: ev.type_.clone(),
-                    commit: ev.hash.clone().unwrap_or_default(),
-                    author: Some(commit.author.clone()),
-                    message: ev.summary.clone(),
-                    created_at: ev.created_at.to_string(),
-                }
+        .flat_map(|commit| {
+            if let Some(evs) = events_by_hash.get_mut(&commit.hash) {
+                evs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                evs.iter()
+                    .map(|ev| EventEntry {
+                        id: Some(ev.id.clone()),
+                        event_type: ev.type_.clone(),
+                        commit: ev.hash.clone().unwrap_or_default(),
+                        author: Some(commit.author.clone()),
+                        message: ev.summary.clone(),
+                        created_at: ev.created_at.to_string(),
+                    })
+                    .collect::<Vec<_>>()
             } else {
-                EventEntry {
+                vec![EventEntry {
                     id: None,
                     event_type: "commit".to_string(),
                     commit: commit.hash.clone(),
                     author: Some(commit.author.clone()),
                     message: commit.message.clone(),
                     created_at: commit.date.clone(),
-                }
+                }]
             }
         })
         .collect();
