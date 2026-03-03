@@ -19,8 +19,14 @@ window.backendAPI = {
   createEvent: (projectId, commit, eventType, newIssues, resolvedIssues, branchContextId) =>
     invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId }),
 
+  fixIssue: (projectId, issueId, branchContextId) => invoke('fix_issue', { projectId, issueId, branchContextId }),
+
   getDirectory: (projectId, directoryPath) => invoke('get_directory', { projectId, directoryPath }),
   readDirectory: (path) => invoke('get_directory', { projectId: 1, directoryPath: path }), // TODO Fallback with dummy projectId
 
   openDirectory: () => open({ directory: true, multiple: false }),
+
+  getLlmSettings: () => invoke('get_llm_settings'),
+  updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
+  resetLlmSettings: () => invoke('reset_llm_settings'),
 };

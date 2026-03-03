@@ -3,7 +3,7 @@ import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -70,6 +70,21 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   useEffect(() => {
     loadProjectState();
   }, [project?.id, branchContextId]);
+
+  const handleFixWithLLM = async (e, issue) => {
+    e.stopPropagation();
+    if (fixingIssueId) return;
+    setFixingIssueId(issue.id);
+    try {
+      await window.backendAPI.fixIssue(project.id, issue.id, branchContextId);
+      await loadProjectState();
+    } catch (error) {
+      console.error('Failed to fix issue:', error);
+      alert('Failed to fix issue: ' + error);
+    } finally {
+      setFixingIssueId(null);
+    }
+  };
 
   // Handle commit click - navigate to review
   const handleCommitClick = (event) => {
@@ -219,8 +234,18 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                 issues.map((issue) => (
                   //  TODO index of 0 is unsafe
                   <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
-                    <div className="issue-id">#{issue.id.substring(0, 8)}</div>
-                    <div className="issue-comment">{issue.comment}</div>
+                    <div className="issue-item-content">
+                      <div className="issue-id">#{issue.id.substring(0, 8)}</div>
+                      <div className="issue-comment">{issue.comment}</div>
+                    </div>
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={(e) => handleFixWithLLM(e, issue)}
+                      disabled={fixingIssueId === issue.id}
+                      title={fixingIssueId === issue.id ? "Fixing this issue..." : "Send to LLM"}
+                    >
+                      {fixingIssueId === issue.id ? 'Fixing...' : 'Send to LLM'}
+                    </button>
                   </div>
                 ))
               ) : (
