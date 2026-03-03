@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import MenuPage from './pages/menu/MenuPage';
 import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
-import SettingsPage from './pages/settings/SettingsPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import './styles.css';
