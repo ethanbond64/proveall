@@ -45,17 +45,21 @@ pub fn create_event(
         }
     }
 
-    // Find the previous event via head_event_id
     let branch_context = branch_context_repo::get(conn, branch_context_id)?;
-    let previous_event = find_previous_event(
-        conn,
-        project_id,
-        &commit,
-        &event_type,
-        // new_event_id not available yet — only used for resolution exclusion filter
-        "",
-        branch_context.head_event_id.as_deref(),
-    )?;
+
+    // Find the previous event and compute the propagation source.
+    // For resolution events, find by commit hash *before* creating the new event
+    // so we don't need to exclude it. For commit events, use head_event_id.
+    let previous_event = match branch_context.head_event_id.as_deref() {
+        Some(heid) => Some(event_repo::get(conn, heid)?),
+        None => None,
+    };
+
+    let resolution_propagate_from = if event_type == "resolution" {
+        find_latest_event_for_commit(conn, project_id, &commit)?
+    } else {
+        None
+    };
 
     // For commit events: create intermediate events for bulk reviews before the target event
     let effective_prev = if event_type == "commit" {
@@ -97,17 +101,9 @@ pub fn create_event(
         )?;
     }
 
-    // Propagate xrefs from the effective previous event to the target event
-    // For resolution events, re-find previous excluding the newly created event
+    // Propagate xrefs from the previous event to the target event
     let propagate_from = if event_type == "resolution" {
-        find_previous_event(
-            conn,
-            project_id,
-            &commit,
-            &event_type,
-            &new_event_id,
-            branch_context.head_event_id.as_deref(),
-        )?
+        resolution_propagate_from
     } else {
         effective_prev
     };
@@ -429,38 +425,24 @@ fn create_composites_for_new_issues(
     Ok(())
 }
 
-fn find_previous_event(
+/// Find the most recent event for a given commit hash on a project.
+/// Used by resolution events to find the event they're resolving against.
+fn find_latest_event_for_commit(
     conn: &mut SqliteConnection,
     project_id: &str,
     commit: &str,
-    event_type: &str,
-    new_event_id: &str,
-    head_event_id: Option<&str>,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
-    if event_type == "resolution" {
-        // Most recent existing event with the current commit hash (not the one we just created)
-        let commit_owned = commit.to_string();
-        let new_event_id_owned = new_event_id.to_string();
-        let project_id_owned = project_id.to_string();
-        let events = event_repo::list(conn, |q| {
-            q.filter(
-                events::project_id
-                    .eq(project_id_owned)
-                    .and(events::hash.eq(commit_owned))
-                    .and(events::id.ne(new_event_id_owned)),
-            )
-            .order(events::created_at.desc())
-        })?;
-        Ok(events.into_iter().next())
-    } else {
-        // Use head_event_id from the branch context — this is the last reviewed event,
-        // which works for both single-commit and bulk reviews.
-        if let Some(heid) = head_event_id {
-            Ok(Some(event_repo::get(conn, heid)?))
-        } else {
-            Ok(None)
-        }
-    }
+    let commit_owned = commit.to_string();
+    let project_id_owned = project_id.to_string();
+    let events = event_repo::list(conn, |q| {
+        q.filter(
+            events::project_id
+                .eq(project_id_owned)
+                .and(events::hash.eq(commit_owned)),
+        )
+        .order(events::created_at.desc())
+    })?;
+    Ok(events.into_iter().next())
 }
 
 fn translate_composite_line_numbers(
