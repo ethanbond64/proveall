@@ -1730,6 +1730,21 @@ body {
   border-color: #1084d8;
 }
 
+.commit-item-selected {
+  border-left: 3px solid #569cd6;
+  background-color: rgba(86, 156, 214, 0.12);
+  border-color: #569cd6;
+}
+
+.commit-item-in-range {
+  border-left: 3px solid rgba(86, 156, 214, 0.5);
+  background-color: rgba(86, 156, 214, 0.06);
+}
+
+.commit-item-in-range:hover {
+  background-color: rgba(86, 156, 214, 0.15);
+}
+
 .commit-item-merge {
   opacity: 0.7;
   cursor: default;

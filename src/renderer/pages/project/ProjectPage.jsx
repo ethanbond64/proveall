@@ -6,6 +6,7 @@ import logoImage from '../../Square310x310Logo.png';
 function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
 
   // Extract data from projectState
   const commits = projectState?.events || [];
@@ -34,6 +35,46 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     }
     return null;
   }, [commits]);
+
+  // Index of the oldest unreviewed commit in the commits array
+  const oldestUnreviewedIndex = useMemo(() => {
+    if (!oldestUnreviewedCommit) return -1;
+    return commits.findIndex(e => e.commit === oldestUnreviewedCommit.commit && e.event_type === 'commit');
+  }, [commits, oldestUnreviewedCommit]);
+
+  // Compute the set of commits in the selected bulk range
+  const selectedRange = useMemo(() => {
+    if (!selectedTargetCommit || !oldestUnreviewedCommit) return new Set();
+    const targetIndex = commits.findIndex(e => e.commit === selectedTargetCommit && e.event_type === 'commit');
+    if (targetIndex < 0 || oldestUnreviewedIndex < 0) return new Set();
+    // commits are newest-first, so target is at a lower index than oldest
+    const rangeCommits = new Set();
+    for (let i = targetIndex; i <= oldestUnreviewedIndex; i++) {
+      if (commits[i].id === null && commits[i].event_type === 'commit') {
+        rangeCommits.add(commits[i].commit);
+      }
+    }
+    return rangeCommits;
+  }, [commits, selectedTargetCommit, oldestUnreviewedCommit, oldestUnreviewedIndex]);
+
+  // The number of commits in the bulk selection
+  const bulkCount = selectedRange.size;
+
+  // Whether bulk mode is active (more than 1 commit selected)
+  const isBulkSelection = bulkCount > 1;
+
+  // Find the base commit for bulk review: the last reviewed commit's hash
+  // (the commit just below oldestUnreviewedCommit in the list)
+  const baseCommitForBulk = useMemo(() => {
+    if (!isBulkSelection || oldestUnreviewedIndex < 0) return null;
+    // Look for the first reviewed commit below the oldest unreviewed
+    for (let i = oldestUnreviewedIndex + 1; i < commits.length; i++) {
+      if (commits[i].id !== null && commits[i].event_type === 'commit') {
+        return commits[i].commit;
+      }
+    }
+    return null; // No reviewed commit found (first review ever)
+  }, [commits, isBulkSelection, oldestUnreviewedIndex]);
 
   console.log({oldestUnreviewedCommit, commits})
 
@@ -86,13 +127,41 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     }
   };
 
-  // Handle commit click - navigate to review
+  // Handle commit click - select for bulk review or toggle selection
   const handleCommitClick = (event) => {
-    // Only allow clicking on the oldest unreviewed commit
-    if (oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit) {
-      // Navigate to review in commit-review mode with just the commit hash
-      console.log("LOOK", {event});
+    if (!oldestUnreviewedCommit) return;
+
+    const clickedIndex = commits.findIndex(e => e.commit === event.commit && e.event_type === 'commit');
+    // Only allow clicking unreviewed commits at or above oldestUnreviewedCommit
+    if (clickedIndex < 0 || clickedIndex > oldestUnreviewedIndex) return;
+    if (event.id !== null || event.event_type !== 'commit') return;
+
+    // If this is the next-to-review commit, navigate directly to review
+    if (event.commit === oldestUnreviewedCommit.commit) {
       onNavigateToReview(event.commit, COMMIT_REVIEW_MODE);
+      return;
+    }
+
+    // Toggle: if clicking the already-selected target, deselect
+    if (selectedTargetCommit === event.commit) {
+      setSelectedTargetCommit(null);
+      return;
+    }
+
+    // Select this commit as the target (top of the range)
+    setSelectedTargetCommit(event.commit);
+  };
+
+  // Handle the review action button click
+  const handleStartReview = () => {
+    if (!oldestUnreviewedCommit) return;
+
+    if (isBulkSelection) {
+      onNavigateToReview(selectedTargetCommit, COMMIT_REVIEW_MODE, null, baseCommitForBulk);
+    } else {
+      // Single commit review (either oldest selected or no selection)
+      const commitToReview = selectedTargetCommit || oldestUnreviewedCommit.commit;
+      onNavigateToReview(commitToReview, COMMIT_REVIEW_MODE);
     }
   };
 
@@ -132,24 +201,34 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                 const isReviewed = event.id !== null;
                 // Check if this is the next commit to review
                 const isNextToReview = !isResolution && oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit;
-                // Can only click if it's the next commit to review
-                const canReview = isNextToReview;
+                // Can click any unreviewed commit at or above oldestUnreviewedCommit
+                const isUnreviewedInRange = !isResolution && !isReviewed && oldestUnreviewedIndex >= 0 && index <= oldestUnreviewedIndex;
+                const canReview = isUnreviewedInRange;
+                // Is this commit in the selected bulk range?
+                const isInSelectedRange = selectedRange.has(event.commit);
+                // Is this the selected target (top of range)?
+                const isSelectedTarget = selectedTargetCommit === event.commit;
 
                 return (
                   <div
                     key={index}
-                    className={`commit-item ${canReview ? 'commit-item-clickable' : ''} ${isNextToReview ? 'commit-item-next' : ''}`}
+                    className={`commit-item ${canReview ? 'commit-item-clickable' : ''} ${isNextToReview && !isBulkSelection ? 'commit-item-next' : ''} ${isInSelectedRange ? 'commit-item-in-range' : ''} ${isSelectedTarget ? 'commit-item-selected' : ''}`}
                     onClick={() => canReview && handleCommitClick(event)}
-                    title={isNextToReview ? 'Click to review this commit (next in sequence)' : (isReviewed ? 'Already reviewed' : 'Review earlier commits first')}
+                    title={canReview ? 'Click to select for review' : (isReviewed ? 'Already reviewed' : (isResolution ? 'Resolution event' : ''))}
                   >
                     <div className="commit-item-header">
                       <div className="commit-hash">{event.commit?.substring(0, 7)}</div>
                       {isResolution && (
                         <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>RESOLUTION</div>
                       )}
-                      {isNextToReview && (
+                      {isNextToReview && !isBulkSelection && (
                         <div className="commit-next-badge" title="Next commit to review">
                           NEXT
+                        </div>
+                      )}
+                      {isSelectedTarget && (
+                        <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>
+                          SELECTED
                         </div>
                       )}
                       {isReviewed && !isResolution && (
@@ -191,11 +270,24 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               )}
 
               <div className="diff-source-buttons-grid">
-                {/* Show the next commit to review button if there's an unreviewed commit */}
-                {oldestUnreviewedCommit ? (
+                {/* Show review button: bulk or single commit */}
+                {oldestUnreviewedCommit && isBulkSelection ? (
                   <button
                     className="diff-source-card diff-source-card-primary"
-                    onClick={() => handleCommitClick(oldestUnreviewedCommit)}
+                    onClick={handleStartReview}
+                  >
+                    <span className="diff-source-card-icon">→</span>
+                    <span className="diff-source-card-label">
+                      Review {bulkCount} Commits
+                      <span className="diff-source-card-sublabel">
+                        {oldestUnreviewedCommit.commit.substring(0, 7)}..{selectedTargetCommit.substring(0, 7)}
+                      </span>
+                    </span>
+                  </button>
+                ) : oldestUnreviewedCommit ? (
+                  <button
+                    className="diff-source-card diff-source-card-primary"
+                    onClick={handleStartReview}
                   >
                     <span className="diff-source-card-icon">→</span>
                     <span className="diff-source-card-label">

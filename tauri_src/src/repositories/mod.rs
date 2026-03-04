@@ -152,6 +152,7 @@ pub mod branch_context_repo {
 pub mod event_repo {
     use crate::models::event::{Event, NewEvent};
     impl_create!(events, Event, NewEvent);
+    impl_get!(events, Event);
     impl_list!(events, Event);
 }
 
@@ -160,6 +161,8 @@ pub mod issue_repo {
     use crate::models::issue::{Issue, NewIssue};
     impl_create!(issues, Issue, NewIssue);
     impl_get!(issues, Issue);
+    #[cfg(test)]
+    impl_list!(issues, Issue);
     impl_update!(issues, Issue);
     impl_inner_join_list!(
         event_issue_composite_xref,
