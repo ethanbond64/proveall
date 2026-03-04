@@ -207,10 +207,7 @@ fn create_intermediate_events(
             ),
         )?;
 
-        let prev_commit = current_prev_event
-            .hash
-            .as_deref()
-            .unwrap_or(hash);
+        let prev_commit = current_prev_event.hash.as_deref().unwrap_or(hash);
 
         propagate_previous_xrefs(
             conn,

@@ -9,8 +9,8 @@ use tempfile::TempDir;
 
 /// Create an in-memory SQLite connection with all migrations applied.
 fn test_conn() -> SqliteConnection {
-    let mut conn = SqliteConnection::establish(":memory:")
-        .expect("Failed to create in-memory connection");
+    let mut conn =
+        SqliteConnection::establish(":memory:").expect("Failed to create in-memory connection");
     diesel::sql_query("PRAGMA foreign_keys = ON")
         .execute(&mut conn)
         .ok();
@@ -254,12 +254,9 @@ fn test_bulk_propagates_xrefs_through_intermediates() {
     .expect("Failed to create c1 event with issue");
 
     // Verify xrefs exist on c1's event
-    let c1_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn,
-        &c1_result.id,
-        &bc_id,
-    )
-    .expect("Failed to get c1 xrefs");
+    let c1_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, &c1_result.id, &bc_id)
+            .expect("Failed to get c1 xrefs");
     assert_eq!(c1_xrefs.len(), 1, "Expected 1 xref on c1 event");
 
     // Now bulk review c3 (skipping c2)
@@ -282,12 +279,9 @@ fn test_bulk_propagates_xrefs_through_intermediates() {
         .expect("Expected an event for c2");
 
     // c2's intermediate event should have propagated xrefs from c1
-    let c2_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn,
-        &c2_event.id,
-        &bc_id,
-    )
-    .expect("Failed to get c2 xrefs");
+    let c2_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, &c2_event.id, &bc_id)
+            .expect("Failed to get c2 xrefs");
     assert_eq!(
         c2_xrefs.len(),
         1,
@@ -298,11 +292,7 @@ fn test_bulk_propagates_xrefs_through_intermediates() {
     let c3_xrefs =
         event_issue_composite_xref_repo::join_list_by_event(&mut conn, &c3_result.id, &bc_id)
             .expect("Failed to get c3 xrefs");
-    assert_eq!(
-        c3_xrefs.len(),
-        1,
-        "Expected 1 xref propagated to c3 target"
-    );
+    assert_eq!(c3_xrefs.len(), 1, "Expected 1 xref propagated to c3 target");
 
     // All xrefs should reference the same issue
     let issue_id = &c1_xrefs[0].0.issue_id;
@@ -371,12 +361,9 @@ fn test_bulk_issues_attached_to_target_only() {
     );
 
     // c1 intermediate should have no xrefs (no prior issues to propagate, no new issues)
-    let c1_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn,
-        &c1_event.id,
-        &bc_id,
-    )
-    .expect("Failed to get c1 xrefs");
+    let c1_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, &c1_event.id, &bc_id)
+            .expect("Failed to get c1 xrefs");
     assert_eq!(
         c1_xrefs.len(),
         0,
@@ -439,7 +426,11 @@ fn test_resolve_one_issue_then_bulk_review_with_translated_lines() {
         .output()
         .unwrap();
     Command::new("git")
-        .args(["commit", "-m", "commit 1 - expand file.txt and add other.txt"])
+        .args([
+            "commit",
+            "-m",
+            "commit 1 - expand file.txt and add other.txt",
+        ])
         .current_dir(dir.path())
         .output()
         .unwrap();
@@ -597,10 +588,7 @@ fn test_resolve_one_issue_then_bulk_review_with_translated_lines() {
         .iter()
         .find(|e| e.hash.as_deref() == Some(c1.as_str()))
         .unwrap();
-    let res_db_event = all_events
-        .iter()
-        .find(|e| e.type_ == "resolution")
-        .unwrap();
+    let res_db_event = all_events.iter().find(|e| e.type_ == "resolution").unwrap();
 
     assert!(base_event.created_at <= c1_db_event.created_at);
     assert!(c1_db_event.created_at <= res_db_event.created_at);
@@ -658,10 +646,7 @@ fn test_resolve_one_issue_then_bulk_review_with_translated_lines() {
         c3_entries[0].start, 10,
         "c3: issue A start should remain at 10"
     );
-    assert_eq!(
-        c3_entries[0].end, 12,
-        "c3: issue A end should remain at 12"
-    );
+    assert_eq!(c3_entries[0].end, 12, "c3: issue A end should remain at 12");
     assert_eq!(c3_entries[0].state, "red");
 
     // head_event_id should point to c3
