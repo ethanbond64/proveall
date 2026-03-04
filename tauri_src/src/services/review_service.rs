@@ -48,15 +48,22 @@ pub fn get_review_file_system_data(
     let event_id = event.as_ref().map(|e| e.id.as_str());
 
     let (touched_files, issues) = match review_type {
-        ReviewType::Commit => (
-            build_commit_touched_files(path, &commit, &event)?,
-            build_issues_from_event(
+        ReviewType::Commit => {
+            let base_ref = resolve_commit_base_ref(
                 conn,
                 branch_context.head_event_id.as_deref(),
-                None,
-                branch_context_id,
-            )?,
-        ),
+                &branch_context.base_branch,
+            )?;
+            (
+                build_commit_touched_files(path, &commit, &base_ref)?,
+                build_issues_from_event(
+                    conn,
+                    branch_context.head_event_id.as_deref(),
+                    None,
+                    branch_context_id,
+                )?,
+            )
+        }
         ReviewType::Branch => (
             build_branch_touched_files(
                 conn,
@@ -76,21 +83,29 @@ pub fn get_review_file_system_data(
     })
 }
 
+/// Resolve the base ref for a commit-mode diff.
+/// If `head_event_id` exists, use that event's commit hash.
+/// Otherwise fall back to the base branch.
+fn resolve_commit_base_ref(
+    conn: &mut SqliteConnection,
+    head_event_id: Option<&str>,
+    base_branch: &str,
+) -> Result<String, AppError> {
+    if let Some(eid) = head_event_id {
+        let prev_event = event_repo::get(conn, eid)?;
+        if let Some(hash) = prev_event.hash {
+            return Ok(hash);
+        }
+    }
+    Ok(base_branch.to_string())
+}
+
 fn build_commit_touched_files(
     project_path: &str,
     commit: &str,
-    event: &Option<crate::models::event::Event>,
+    base_ref: &str,
 ) -> Result<Vec<TouchedFile>, AppError> {
-    // If an event already exists for this commit, error
-    if event.is_some() {
-        return Err(AppError::Git(
-            "Unimplemented: commit event already exists for this hash".to_string(),
-        ));
-    }
-
-    // Files from commit vs its parent, all default to red
-    let parent = format!("{}^", commit);
-    let diff_files = diff_changed_files(project_path, &[&parent, commit])?;
+    let diff_files = diff_changed_files(project_path, &[base_ref, commit])?;
 
     Ok(diff_files
         .into_iter()
@@ -196,14 +211,14 @@ pub fn get_review_file_data(
 
     let (diff, line_summary, issues) = match review_type {
         ReviewType::Commit => {
-            if event.is_some() {
-                return Err(AppError::Git(
-                    "Unimplemented: commit event already exists for this hash".to_string(),
-                ));
-            }
-            let parent_ref = format!("{}^:{}", commit, file_path);
+            let base_ref = resolve_commit_base_ref(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                &branch_context.base_branch,
+            )?;
+            let base_file_ref = format!("{}:{}", base_ref, file_path);
             let diff = Some(
-                run_git(path, &["show", &parent_ref])
+                run_git(path, &["show", &base_file_ref])
                     .map(|o| o.stdout)
                     .unwrap_or_default(),
             );
