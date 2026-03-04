@@ -13,8 +13,10 @@ export function useLineReviewDecorations(
   path
 ) {
   const decorationsRef = useRef([]);
+  const selectionHighlightRef = useRef([]);
   const [popupState, setPopupState] = useState(null);
   const clickDisposableRef = useRef(null);
+  const selectionDisposableRef = useRef(null);
   const editorRef = useRef(null);
   const lineReviewsRef = useRef(lineReviews);
 
@@ -162,6 +164,68 @@ export function useLineReviewDecorations(
     };
   }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
 
+  // Highlight glyph dots with blue outline when lines are selected
+  useEffect(() => {
+    const currentEditor = editorRef.current;
+    if (!currentEditor || !isInteractive) return;
+
+    if (selectionDisposableRef.current) {
+      selectionDisposableRef.current.dispose();
+      selectionDisposableRef.current = null;
+    }
+
+    const updateSelectionHighlight = () => {
+      const selection = currentEditor.getSelection();
+      let decorations = [];
+
+      if (selection && !selection.isEmpty()) {
+        const startLine = selection.startLineNumber;
+        let endLine = selection.endLineNumber;
+        // Exclude last line if cursor is at column 1 (no content selected on that line)
+        if (selection.endColumn === 1 && endLine > startLine) {
+          endLine = endLine - 1;
+        }
+        for (let line = startLine; line <= endLine; line++) {
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: 'line-review-dot-selected',
+            }
+          });
+        }
+      }
+
+      try {
+        selectionHighlightRef.current = currentEditor.deltaDecorations(
+          selectionHighlightRef.current || [],
+          decorations
+        );
+      } catch (e) {
+        selectionHighlightRef.current = [];
+      }
+    };
+
+    selectionDisposableRef.current = currentEditor.onDidChangeCursorSelection(updateSelectionHighlight);
+
+    return () => {
+      if (selectionDisposableRef.current) {
+        selectionDisposableRef.current.dispose();
+        selectionDisposableRef.current = null;
+      }
+      // Clear any remaining highlights
+      try {
+        if (currentEditor && selectionHighlightRef.current.length > 0) {
+          selectionHighlightRef.current = currentEditor.deltaDecorations(
+            selectionHighlightRef.current, []
+          );
+        }
+      } catch (e) {
+        selectionHighlightRef.current = [];
+      }
+    };
+  }, [editor, isInteractive]);
+
   // Handle glyph margin clicks
   useEffect(() => {
     const currentEditor = editorRef.current;
@@ -224,13 +288,19 @@ export function useLineReviewDecorations(
   useEffect(() => {
     return () => {
       const currentEditor = editorRef.current;
-      if (currentEditor && decorationsRef.current.length > 0) {
+      if (currentEditor) {
         try {
-          currentEditor.deltaDecorations(decorationsRef.current, []);
+          if (decorationsRef.current.length > 0) {
+            currentEditor.deltaDecorations(decorationsRef.current, []);
+          }
+          if (selectionHighlightRef.current.length > 0) {
+            currentEditor.deltaDecorations(selectionHighlightRef.current, []);
+          }
         } catch (error) {
           // Editor might be disposed, which is fine during cleanup
         }
         decorationsRef.current = [];
+        selectionHighlightRef.current = [];
       }
     };
   }, []); // Empty deps - only run cleanup on unmount
