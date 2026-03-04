@@ -13,6 +13,7 @@ const initialState = {
   projectPath: '',
   commit: '',
   issueId: null,
+  baseCommit: null,
   branchContextId: null,
 
   // File system state
@@ -65,7 +66,7 @@ const ActionTypes = {
 function reviewReducer(state, action) {
   switch (action.type) {
     case ActionTypes.INITIALIZE: {
-      const { mode, projectId, projectPath, commit, issueId, branchContextId, touchedFiles, issues } = action.payload;
+      const { mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId, touchedFiles, issues } = action.payload;
 
       // Convert arrays to Maps for efficient lookups
       const touchedFilesMap = new Map();
@@ -89,6 +90,7 @@ function reviewReducer(state, action) {
         projectPath,
         commit,
         issueId,
+        baseCommit,
         branchContextId,
         touchedFiles: touchedFilesMap,
         issues: issuesMap,
@@ -369,7 +371,7 @@ function reviewReducer(state, action) {
 }
 
 // Provider component
-export function ReviewContextProvider({ children, mode, projectId, projectPath, commit, issueId, branchContextId }) {
+export function ReviewContextProvider({ children, mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId }) {
   const [state, dispatch] = useReducer(reviewReducer, initialState);
 
   // Initialize context with backend data
@@ -386,7 +388,8 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           commit,
           issueId,
           mode,
-          branchContextId
+          branchContextId,
+          baseCommit
         );
 
         dispatch({
@@ -397,6 +400,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
             projectPath,
             commit,
             issueId,
+            baseCommit,
             branchContextId,
             touchedFiles: data?.touchedFiles || [],
             issues: data?.issues || [],
@@ -409,21 +413,20 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
     };
 
     loadInitialData();
-  }, [mode, projectId, projectPath, commit, issueId, branchContextId]);
+  }, [mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId]);
 
   // Action methods
   const actions = useMemo(() => ({
     loadFileData: async (path) => {
       try {
-        // Call API with correct parameters
-        // API expects: (projectId, commit, issueId, reviewType, relativePath, branchContextId)
         const data = await window.backendAPI.getReviewFileData(
           projectId,
           commit,
           issueId,
           state.mode,
           path,
-          branchContextId
+          branchContextId,
+          state.baseCommit
         );
 
         dispatch({
@@ -503,7 +506,8 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           'resolution',  // eventType
           [],  // newIssues (empty for resolution)
           [issueId],  // resolvedIssues (single issue)
-          state.branchContextId
+          state.branchContextId,
+          state.baseCommit
         );
 
         console.log(`Issue ${issueId} resolved successfully. Event ID: ${eventId}`);
@@ -525,7 +529,8 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           state.commit,
           state.issueId,
           state.mode,
-          state.branchContextId
+          state.branchContextId,
+          state.baseCommit
         );
 
         dispatch({
@@ -536,6 +541,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
             projectPath: state.projectPath,
             commit: state.commit,
             issueId: state.issueId,
+            baseCommit: state.baseCommit,
             branchContextId: state.branchContextId,
             touchedFiles: data?.touchedFiles || [],
             issues: data?.issues || [],
@@ -614,7 +620,8 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           eventType,
           newIssues,
           resolvedIssues,
-          state.branchContextId
+          state.branchContextId,
+          state.baseCommit
         );
 
         // Clear session state after successful save
@@ -627,7 +634,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
         throw error;
       }
     },
-  }), [projectId, commit, issueId, state.mode, state.session, state.projectPath, state.branchContextId, branchContextId]);
+  }), [projectId, commit, issueId, state.mode, state.session, state.projectPath, state.branchContextId, state.baseCommit, branchContextId]);
 
 
   // Computed values
