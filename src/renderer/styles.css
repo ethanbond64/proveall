@@ -1336,9 +1336,10 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
 }
 
-/* Drag selection highlight for line review range selection */
-.line-review-drag-highlight {
-  background: rgba(100, 150, 255, 0.15) !important;
+/* Blue outline on glyph dots when lines are selected in the editor */
+.line-review-dot-selected {
+  border: 2px solid #4a9eff !important;
+  border-radius: 50% !important;
 }
 
 .line-review-dot-yellow:hover {
