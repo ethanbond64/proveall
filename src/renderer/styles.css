@@ -1284,7 +1284,8 @@ body {
 .line-review-dot-red,
 .line-review-dot-yellow,
 .line-review-dot-green,
-.line-review-dot-unreviewed {
+.line-review-dot-unreviewed,
+.line-review-dot-unreviewed-required {
   cursor: pointer !important;
   width: 12px !important;
   height: 12px !important;
@@ -1316,6 +1317,11 @@ body {
   background-color: #666666 !important;
 }
 
+.line-review-dot-unreviewed-required {
+  background-color: #666666 !important;
+  border: 2px solid #ff9800 !important;
+}
+
 .line-review-dot-red:hover {
   background-color: #f44336 !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -1324,6 +1330,16 @@ body {
 .line-review-dot-unreviewed:hover {
   background-color: #888888 !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+.line-review-dot-unreviewed-required:hover {
+  background-color: #888888 !important;
+  border: 2px solid #ffb74d !important;
+}
+
+/* Drag selection highlight for line review range selection */
+.line-review-drag-highlight {
+  background: rgba(100, 150, 255, 0.15) !important;
 }
 
 .line-review-dot-yellow:hover {
