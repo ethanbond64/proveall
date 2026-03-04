@@ -11,13 +11,13 @@ window.backendAPI = {
     invoke('create_branch_context', { projectId, branch, baseBranch, settings }),
 
   getProjectState: (projectId, branchContextId) => invoke('get_project_state', { projectId, branchContextId }),
-  getReviewFileSystemData: (projectId, commit, issueId, reviewType, branchContextId) =>
-    invoke('get_review_file_system_data', { projectId, commit, issueId, reviewType, branchContextId }),
-  getReviewFileData: (projectId, commit, issueId, reviewType, filePath, branchContextId) =>
-    invoke('get_review_file_data', { projectId, commit, issueId, reviewType, filePath, branchContextId }),
+  getReviewFileSystemData: (projectId, commit, issueId, reviewType, branchContextId, baseCommit = null) =>
+    invoke('get_review_file_system_data', { projectId, commit, issueId, reviewType, branchContextId, baseCommit }),
+  getReviewFileData: (projectId, commit, issueId, reviewType, filePath, branchContextId, baseCommit = null) =>
+    invoke('get_review_file_data', { projectId, commit, issueId, reviewType, filePath, branchContextId, baseCommit }),
 
-  createEvent: (projectId, commit, eventType, newIssues, resolvedIssues, branchContextId) =>
-    invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId }),
+  createEvent: (projectId, commit, eventType, newIssues, resolvedIssues, branchContextId, baseCommit = null) =>
+    invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId, baseCommit }),
 
   fixIssue: (projectId, issueId, branchContextId) => invoke('fix_issue', { projectId, issueId, branchContextId }),
 
