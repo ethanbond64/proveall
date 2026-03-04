@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::schema::events;
 use crate::utils::hash_id;
 
-#[derive(Queryable, Selectable, Serialize, Debug)]
+#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
 #[diesel(table_name = events)]
 pub struct Event {
     pub id: String,

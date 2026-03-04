@@ -122,53 +122,42 @@ No changes. The command signatures stay the same since `base_commit` is not pass
 
 3. Remove the "event already exists" error in `build_commit_touched_files` — when reviewing a range, the target commit won't have an event yet, but this check is overly restrictive.
 
-### Step 7: Backend Event Service — Bulk Event Creation
+### Step 7: Backend Event Service — find_previous_event (DONE)
 
 **File: `tauri_src/src/services/event_service.rs`**
 
 1. In `find_previous_event` (for commit events):
    - Instead of looking up `commit^`, look up the `head_event_id` from the `BranchContext` directly. This naturally handles both single and bulk reviews — the previous event is always the one pointed to by `head_event_id`.
-   - Accept `branch_context_id` as a parameter to `find_previous_event`.
 
-2. The single event created will have `hash = target_commit`. The xref propagation uses the `head_event_id` event to carry forward unresolved issues, translating line numbers across the full diff range (`base_commit..target_commit`).
-
-3. After the event is created and `head_event_id` is updated, all the intermediate commits are effectively "skipped" — they don't get individual events.
-
-### Step 8: Intermediate Event Creation for Bulk Reviews
+### Step 7.5: Reorder create_event — Intermediates Before Target
 
 **File: `tauri_src/src/services/event_service.rs`**
 
-When `create_event` is called and the target commit is more than one commit ahead of the `head_event_id` commit, it is a bulk review. The backend must create intermediate event rows for every commit in the range so that `project_service` continues to work without modification (every commit has a matching event row).
+Restructure `create_event` so that **intermediate events are created before the target event**. The target event (with issues attached) should be the last event created.
 
-**No changes needed to `project_service.rs`** — the existing logic already marks commits as reviewed when they have event rows.
+#### New flow for `create_event`
 
-#### Algorithm
+1. **Validation** (unchanged).
+2. **Find previous event** via `head_event_id` (unchanged from step 7).
+3. **Enumerate intermediate commits** (if commit-type event and previous event exists):
+   - Get the previous event's commit hash (`base_commit`).
+   - Run `git log --format=%H <base_commit>..<target_commit>` to list all commits in the range (newest first).
+   - Remove the target commit from the list, reverse to get chronological order (oldest first). These are the intermediates.
+4. **Create intermediate events** in chronological order:
+   - For each intermediate commit hash, create an event row (`type="commit"`, `hash=<hash>`, summary from git log).
+   - Propagate xrefs from the previous event to this new event, translating line numbers via `git diff <prev_commit> <intermediate_commit>`.
+   - Track the "current previous" event/commit — each intermediate becomes the previous for the next.
+   - No issues are attached to intermediate events.
+5. **Create the target event** (`hash=target_commit`), with summary from git log.
+6. **Create issues with reviews** — attached to the target event.
+7. **Mark resolved issues**.
+8. **Propagate xrefs** from the last intermediate event (or `head_event_id` if no intermediates) to the target event.
+9. **Create composites** for new issues' non-green reviews.
+10. **Update `head_event_id`** to point to the target event.
 
-After the primary event for the target commit is created (with issues/reviews attached to it), but **before** updating `head_event_id`:
+For single-commit reviews (no intermediates), steps 3-4 are skipped and the flow is identical to the original.
 
-1. **Enumerate intermediate commits**: Run `git log --format=%H <base_commit>..<target_commit>` to get all commit hashes in the range (newest first). Exclude the target commit (it already has the primary event). The remaining hashes are the intermediate commits.
-
-2. **Create events in chronological order** (oldest first — reverse the git log output):
-   For each intermediate commit hash:
-   - Create an event row: `type="commit"`, `hash=<intermediate_hash>`, summary from `git log -1 --format=%s <hash>`.
-   - Propagate xrefs from the previous event to this new event, translating line numbers using `git diff <prev_commit> <intermediate_commit>`. The first intermediate event propagates from the `head_event_id` event (the base). Each subsequent one propagates from the event just created before it.
-
-3. **The primary event** (target commit) then propagates from the last intermediate event instead of directly from `head_event_id`. Since `find_previous_event` already uses `head_event_id`, we need to update `head_event_id` as we go through intermediates so the primary event's propagation chains correctly. Alternatively, track the "current previous event" explicitly during the loop.
-
-4. **Update `head_event_id`** to point to the primary event (target commit) at the end, as before.
-
-#### Determining if this is a bulk review
-
-The backend detects a bulk review by comparing the `head_event_id` event's commit hash with `commit^`:
-- If `head_event_id` is `None`, check if there are commits between `base_branch` and `commit`.
-- If `head_event_id`'s commit hash equals `commit^` (the parent), this is a single-commit review — no intermediates needed.
-- Otherwise, there are intermediate commits to process.
-
-#### Key details
-
-- Intermediate events have **no issues** attached — all issues from the review are on the primary (target commit) event only.
-- Xrefs are propagated through each intermediate event in sequence, with line numbers translated at each step. This ensures that by the time the primary event is created, the xrefs have been accurately translated through every commit in the range.
-- The summary for each intermediate event is the commit message from git.
+### Step 8: No Changes Needed to project_service.rs
 
 **No changes to `project_service.rs`** — every commit in the range now has an event row, so the existing `build_event_entries` logic works as-is.
 
@@ -191,12 +180,12 @@ Commit list (newest first):
 4. Backend looks up `head_event_id` -> finds C2's event -> diffs `C2..C5` to get all touched files.
 5. User reviews files. Monaco shows `git show C2:<path>` as original, `git show C5:<path>` as modified.
 6. Save calls `createEvent(projectId, C5, 'commit', newIssues, resolved, bcId)`.
-7. Backend creates the primary event with `hash=C5` and attaches all new issues to it.
-8. Backend detects C2 (head_event_id's commit) != C5^ (C4), so this is a bulk review.
-9. Backend enumerates intermediates: `git log --format=%H C2..C5` -> [C5, C4, C3], excludes C5 -> [C4, C3], reverses -> [C3, C4].
-10. Creates event for C3 (no issues), propagates xrefs from C2's event, translating lines via `git diff C2 C3`.
-11. Creates event for C4 (no issues), propagates xrefs from C3's event, translating lines via `git diff C3 C4`.
-12. Propagates xrefs from C4's event to the primary C5 event, translating lines via `git diff C4 C5`.
+7. Backend finds previous event via `head_event_id` (C2's event).
+8. Backend enumerates intermediates: `git log --format=%H C2..C5` -> [C5, C4, C3], excludes C5 -> [C4, C3], reverses -> [C3, C4].
+9. Creates event for C3 (no issues), propagates xrefs from C2's event, translating lines via `git diff C2 C3`.
+10. Creates event for C4 (no issues), propagates xrefs from C3's event, translating lines via `git diff C3 C4`.
+11. Creates the target event with `hash=C5`, attaches all new issues to it.
+12. Propagates xrefs from C4's event to the C5 event, translating lines via `git diff C4 C5`.
 13. Creates composites for C5's new issues, updates `head_event_id` to the C5 event.
 14. Back on ProjectPage, `getProjectState` returns: C5, C4, C3 all have event rows -> all marked reviewed.
 

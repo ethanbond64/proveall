@@ -45,8 +45,35 @@ pub fn create_event(
         }
     }
 
-    let summary = build_event_summary(conn, path, &commit, &event_type, &resolved_issues);
+    // Find the previous event via head_event_id
+    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
+    let previous_event = find_previous_event(
+        conn,
+        project_id,
+        &commit,
+        &event_type,
+        // new_event_id not available yet — only used for resolution exclusion filter
+        "",
+        branch_context.head_event_id.as_deref(),
+    )?;
 
+    // For commit events: create intermediate events for bulk reviews before the target event
+    let effective_prev = if event_type == "commit" {
+        create_intermediate_events(
+            conn,
+            project_id,
+            &commit,
+            previous_event.as_ref(),
+            &resolved_issues,
+            path,
+            branch_context_id,
+        )?
+    } else {
+        previous_event.clone()
+    };
+
+    // Create the target event
+    let summary = build_event_summary(conn, path, &commit, &event_type, &resolved_issues);
     let event = event_repo::create(
         conn,
         NewEvent::new(
@@ -58,6 +85,7 @@ pub fn create_event(
     )?;
     let new_event_id = event.id.clone();
 
+    // Create issues with reviews — attached to the target event
     let created_issues = create_issues_with_reviews(conn, project_id, &new_event_id, new_issues)?;
 
     // Mark resolved issues with the resolution event ID
@@ -69,18 +97,22 @@ pub fn create_event(
         )?;
     }
 
-    // Propagate unresolved xrefs from the previous event, translating line numbers for touched files
-    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
-    let previous_event = find_previous_event(
-        conn,
-        project_id,
-        &commit,
-        &event_type,
-        &new_event_id,
-        branch_context.head_event_id.as_deref(),
-    )?;
+    // Propagate xrefs from the effective previous event to the target event
+    // For resolution events, re-find previous excluding the newly created event
+    let propagate_from = if event_type == "resolution" {
+        find_previous_event(
+            conn,
+            project_id,
+            &commit,
+            &event_type,
+            &new_event_id,
+            branch_context.head_event_id.as_deref(),
+        )?
+    } else {
+        effective_prev
+    };
 
-    if let Some(prev_event) = &previous_event {
+    if let Some(prev_event) = &propagate_from {
         let prev_commit = prev_event.hash.as_deref().unwrap_or(&commit);
         propagate_previous_xrefs(
             conn,
@@ -114,6 +146,90 @@ pub fn create_event(
     )?;
 
     Ok(CreateEventResponse { id: new_event_id })
+}
+
+/// Create intermediate events for commits between the previous event's commit and the target commit.
+/// Returns the effective previous event — either the last intermediate created, or the original
+/// previous event if no intermediates were needed.
+fn create_intermediate_events(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    target_commit: &str,
+    previous_event: Option<&crate::models::event::Event>,
+    resolved_issues: &[String],
+    project_path: &str,
+    branch_context_id: &str,
+) -> Result<Option<crate::models::event::Event>, AppError> {
+    let Some(prev_event) = previous_event else {
+        return Ok(None);
+    };
+
+    let base_commit = match prev_event.hash.as_deref() {
+        Some(h) => h,
+        None => return Ok(Some(prev_event.clone())),
+    };
+
+    // Enumerate commits in the range (newest first)
+    let range = format!("{}..{}", base_commit, target_commit);
+    let log_output = run_git(project_path, &["log", "--format=%H", &range])
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+
+    let all_hashes: Vec<&str> = log_output.lines().filter(|l| !l.is_empty()).collect();
+
+    // Remove the target commit (first in the list) and reverse to chronological order
+    let intermediate_hashes: Vec<&str> = all_hashes
+        .iter()
+        .filter(|h| **h != target_commit)
+        .copied()
+        .rev()
+        .collect();
+
+    if intermediate_hashes.is_empty() {
+        return Ok(Some(prev_event.clone()));
+    }
+
+    // Create intermediate events in chronological order, propagating xrefs through each
+    let mut current_prev_event = prev_event.clone();
+
+    for hash in intermediate_hashes {
+        let summary = run_git(project_path, &["log", "-1", "--format=%s", hash])
+            .map(|o| o.stdout.trim().to_string())
+            .unwrap_or_default();
+
+        let intermediate_event = event_repo::create(
+            conn,
+            NewEvent::new(
+                project_id.to_string(),
+                "commit".to_string(),
+                Some(hash.to_string()),
+                summary,
+            ),
+        )?;
+
+        let prev_commit = current_prev_event
+            .hash
+            .as_deref()
+            .unwrap_or(hash);
+
+        propagate_previous_xrefs(
+            conn,
+            PropagateXrefsParams {
+                project_id,
+                new_event_id: &intermediate_event.id,
+                prev_event_id: &current_prev_event.id,
+                prev_commit,
+                resolved_issues,
+                project_path,
+                commit: hash,
+                branch_context_id,
+            },
+        )?;
+
+        current_prev_event = intermediate_event;
+    }
+
+    Ok(Some(current_prev_event))
 }
 
 fn build_event_summary(
