@@ -70,8 +70,15 @@ pub fn create_event(
     }
 
     // Propagate unresolved xrefs from the previous event, translating line numbers for touched files
-    let previous_event =
-        find_previous_event(conn, project_id, &commit, &event_type, &new_event_id, path)?;
+    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
+    let previous_event = find_previous_event(
+        conn,
+        project_id,
+        &commit,
+        &event_type,
+        &new_event_id,
+        branch_context.head_event_id.as_deref(),
+    )?;
 
     if let Some(prev_event) = &previous_event {
         let prev_commit = prev_event.hash.as_deref().unwrap_or(&commit);
@@ -315,7 +322,7 @@ fn find_previous_event(
     commit: &str,
     event_type: &str,
     new_event_id: &str,
-    project_path: &str,
+    head_event_id: Option<&str>,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
     if event_type == "resolution" {
         // Most recent existing event with the current commit hash (not the one we just created)
@@ -333,22 +340,10 @@ fn find_previous_event(
         })?;
         Ok(events.into_iter().next())
     } else {
-        // Most recent event with the parent commit hash
-        let parent_hash = run_git(project_path, &["rev-parse", &format!("{}^", commit)])
-            .map(|o| o.stdout.trim().to_string())
-            .ok();
-
-        if let Some(parent) = parent_hash {
-            let project_id_owned = project_id.to_string();
-            let events = event_repo::list(conn, |q| {
-                q.filter(
-                    events::project_id
-                        .eq(project_id_owned)
-                        .and(events::hash.eq(parent)),
-                )
-                .order(events::created_at.desc())
-            })?;
-            Ok(events.into_iter().next())
+        // Use head_event_id from the branch context — this is the last reviewed event,
+        // which works for both single-commit and bulk reviews.
+        if let Some(heid) = head_event_id {
+            Ok(Some(event_repo::get(conn, heid)?))
         } else {
             Ok(None)
         }
