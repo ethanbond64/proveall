@@ -78,10 +78,14 @@ pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, App
     let llm_output = call_llm(config, &ctx.project_path, &prompt)?;
 
     run_git(&ctx.project_path, &["add", "-A"])?;
-    run_git(
-        &ctx.project_path,
-        &["commit", "-m", &format!("fix: {}", ctx.issue_comment)],
-    )?;
+    // Only commit if the LLM actually changed files
+    let status = run_git(&ctx.project_path, &["status", "--porcelain"])?;
+    if !status.stdout.trim().is_empty() {
+        run_git(
+            &ctx.project_path,
+            &["commit", "-m", &format!("fix: {}", ctx.issue_comment)],
+        )?;
+    }
 
     Ok(llm_output)
 }
