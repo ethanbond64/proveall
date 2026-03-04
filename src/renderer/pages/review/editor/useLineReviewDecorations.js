@@ -18,7 +18,6 @@ export function useLineReviewDecorations(
   const clickDisposableRef = useRef(null);
   const editorRef = useRef(null);
   const dragStateRef = useRef({ isDragging: false, startLine: null });
-  const lastClickedLineRef = useRef(null);
   const lineReviewsRef = useRef(lineReviews);
 
   // Store editor reference to ensure stability
@@ -239,24 +238,13 @@ export function useLineReviewDecorations(
 
     const disposables = [];
 
-    // onMouseDown — start drag or handle shift-click
+    // onMouseDown — start drag
     disposables.push(currentEditor.onMouseDown(e => {
       if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
       const lineNumber = e.target.position?.lineNumber;
       if (!lineNumber) return;
 
-      // Shift-click: extend from last clicked line
-      if (e.event.shiftKey && lastClickedLineRef.current != null) {
-        const start = lastClickedLineRef.current;
-        clearDragHighlight(currentEditor);
-        openPopup({ x: e.event.posx, y: e.event.posy }, start, lineNumber);
-        // Don't update lastClickedLine — keep anchor for further shift-clicks
-        return;
-      }
-
-      // Normal click: start drag
       dragStateRef.current = { isDragging: true, startLine: lineNumber };
-      lastClickedLineRef.current = lineNumber;
       applyDragHighlight(currentEditor, lineNumber, lineNumber);
     }));
 
@@ -337,13 +325,5 @@ export function useLineReviewDecorations(
     };
   }, []); // Empty deps - only run cleanup on unmount
 
-  // Wrap setPopupState to clear the shift-click anchor when popup is dismissed
-  const dismissPopup = (value) => {
-    if (value == null) {
-      lastClickedLineRef.current = null;
-    }
-    setPopupState(value);
-  };
-
-  return { popupState, setPopupState: dismissPopup };
+  return { popupState, setPopupState };
 }
