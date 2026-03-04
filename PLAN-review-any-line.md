@@ -7,6 +7,7 @@ Currently, line review is constrained to diff change blocks (hunks). Clicking a 
 1. **Any line** in the modified file can be reviewed, not just lines in diff hunks.
 2. Clicking a single line affects **only that line** (not the whole hunk).
 3. **Click-and-drag** selects a contiguous range of lines, then shows the stoplight popup for that range.
+4. **Shift-click** extends a selection from the last-clicked line to the shift-clicked line, opening the popup for the full inclusive range.
 
 ## Affected Files
 
@@ -42,14 +43,23 @@ This means non-diff lines are visually clean by default but will show a dot if t
 
 #### State
 - `dragState` ref: `{ isDragging: boolean, startLine: number | null }`
+- `lastClickedLine` ref: `number | null` — persists the last line the user clicked (for shift-click). Updated on every mousedown that initiates a selection. Reset when the popup is dismissed.
 - `selectionRange` state: `{ start: number, end: number } | null` — drives highlight decorations during drag
 
 #### Mouse Events
 
 **`onMouseDown` (glyph margin click):**
-1. Record `dragState = { isDragging: true, startLine: lineNumber }`.
-2. Set `selectionRange = { start: lineNumber, end: lineNumber }`.
-3. Do NOT open popup yet.
+1. **If shift is held** and `lastClickedLine` is set:
+   - Compute range from `lastClickedLine` to clicked `lineNumber` (normalize so start <= end).
+   - Set `selectionRange` to that range.
+   - Immediately open the stoplight popup for that range (same as drag-end behavior).
+   - Do NOT update `lastClickedLine` (keep the original anchor so the user can shift-click again to adjust).
+   - Return early — do not start a drag.
+2. **Otherwise (no shift):**
+   - Record `dragState = { isDragging: true, startLine: lineNumber }`.
+   - Set `lastClickedLine = lineNumber`.
+   - Set `selectionRange = { start: lineNumber, end: lineNumber }`.
+   - Do NOT open popup yet (wait for mouseup).
 
 **`onMouseMove` (while dragging):**
 1. If `dragState.isDragging` and mouse is over a line (any target type with a position), update `selectionRange.end` to that line number.
@@ -67,9 +77,12 @@ This means non-diff lines are visually clean by default but will show a dot if t
 
 **Single click:** This naturally falls out of the drag logic — a click without movement produces `start === end`, i.e., a single-line range.
 
+**Shift-click:** The user clicks line 10 (popup opens for line 10). They dismiss or ignore it, then shift-click line 20. The popup opens for lines 10–20. They can shift-click line 15 instead to adjust to 10–15. `lastClickedLine` stays at 10 as the anchor until a non-shift click resets it.
+
 #### Edge Cases
 - If the user drags outside the editor, treat `onMouseUp` on `document` as the end of the drag (attach a global listener on mousedown, remove on mouseup).
 - If the user presses Escape during drag, cancel the selection.
+- `lastClickedLine` is cleared when the popup is dismissed without saving, so stale anchors don't persist across unrelated interactions.
 
 ### 3. `DiffEditor.jsx` — Pass Hook Dependencies
 
@@ -105,6 +118,8 @@ This will be applied as a `className` (whole-line decoration) to lines in the se
 4. **Manual testing** — Verify:
    - Single click on a diff line reviews just that line (not the whole hunk).
    - Click-and-drag across multiple lines highlights them and opens popup for that range.
+   - Shift-click after a regular click selects the inclusive range between the two lines.
+   - Shift-click again adjusts the range end while keeping the original anchor.
    - Non-diff lines can be clicked and reviewed.
    - File progress still works correctly (all diff hunks must be covered).
    - Existing reviews from backend load and display correctly.
