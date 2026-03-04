@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-03
+
 ### Modified
 - Fixed issue with resolving shell's full PATH for built app.
 - Fixed issue where LLM was trying to commit even if no changes were made.
