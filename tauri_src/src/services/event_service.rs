@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
-use crate::db::schema::{branch_context, events, issues};
+use crate::db::schema::{branch_context, issues};
 use crate::error::AppError;
 use crate::models::composite_file_review_state::{
     NewCompositeFileReviewState, ReviewSummaryMetadataEntry,
@@ -47,18 +47,9 @@ pub fn create_event(
 
     let branch_context = branch_context_repo::get(conn, branch_context_id)?;
 
-    // Find the previous event and compute the propagation source.
-    // For resolution events, find by commit hash *before* creating the new event
-    // so we don't need to exclude it. For commit events, use head_event_id.
     let previous_event = match branch_context.head_event_id.as_deref() {
         Some(heid) => Some(event_repo::get(conn, heid)?),
         None => None,
-    };
-
-    let resolution_propagate_from = if event_type == "resolution" {
-        find_latest_event_for_commit(conn, project_id, &commit)?
-    } else {
-        None
     };
 
     // For commit events: create intermediate events for bulk reviews before the target event
@@ -73,7 +64,7 @@ pub fn create_event(
             branch_context_id,
         )?
     } else {
-        previous_event.clone()
+        previous_event
     };
 
     // Create the target event
@@ -101,14 +92,7 @@ pub fn create_event(
         )?;
     }
 
-    // Propagate xrefs from the previous event to the target event
-    let propagate_from = if event_type == "resolution" {
-        resolution_propagate_from
-    } else {
-        effective_prev
-    };
-
-    if let Some(prev_event) = &propagate_from {
+    if let Some(prev_event) = &effective_prev {
         let prev_commit = prev_event.hash.as_deref().unwrap_or(&commit);
         propagate_previous_xrefs(
             conn,
@@ -425,25 +409,6 @@ fn create_composites_for_new_issues(
     Ok(())
 }
 
-/// Find the most recent event for a given commit hash on a project.
-/// Used by resolution events to find the event they're resolving against.
-fn find_latest_event_for_commit(
-    conn: &mut SqliteConnection,
-    project_id: &str,
-    commit: &str,
-) -> Result<Option<crate::models::event::Event>, AppError> {
-    let commit_owned = commit.to_string();
-    let project_id_owned = project_id.to_string();
-    let events = event_repo::list(conn, |q| {
-        q.filter(
-            events::project_id
-                .eq(project_id_owned)
-                .and(events::hash.eq(commit_owned)),
-        )
-        .order(events::created_at.desc())
-    })?;
-    Ok(events.into_iter().next())
-}
 
 fn translate_composite_line_numbers(
     prev_summary_metadata: &str,
