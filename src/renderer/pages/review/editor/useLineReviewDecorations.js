@@ -13,11 +13,9 @@ export function useLineReviewDecorations(
   path
 ) {
   const decorationsRef = useRef([]);
-  const dragHighlightRef = useRef([]);
   const [popupState, setPopupState] = useState(null);
   const clickDisposableRef = useRef(null);
   const editorRef = useRef(null);
-  const dragStateRef = useRef({ isDragging: false, startLine: null });
   const lineReviewsRef = useRef(lineReviews);
 
   // Store editor reference to ensure stability
@@ -164,140 +162,55 @@ export function useLineReviewDecorations(
     };
   }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
 
-  // Helper to apply or clear drag highlight decorations
-  const applyDragHighlight = (currentEditor, start, end) => {
-    if (!currentEditor) return;
-    const min = Math.min(start, end);
-    const max = Math.max(start, end);
-    const decorations = [];
-    for (let line = min; line <= max; line++) {
-      decorations.push({
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: 'line-review-drag-highlight',
-        }
-      });
-    }
-    try {
-      dragHighlightRef.current = currentEditor.deltaDecorations(
-        dragHighlightRef.current || [],
-        decorations
-      );
-    } catch (e) {
-      dragHighlightRef.current = [];
-    }
-  };
-
-  const clearDragHighlight = (currentEditor) => {
-    if (!currentEditor) return;
-    try {
-      dragHighlightRef.current = currentEditor.deltaDecorations(
-        dragHighlightRef.current || [],
-        []
-      );
-    } catch (e) {
-      dragHighlightRef.current = [];
-    }
-  };
-
-  // Helper to find existing review for a given range
-  const findExistingReview = (start, end) => {
-    const reviews = lineReviewsRef.current;
-    return reviews?.lineRanges?.find(
-      r => r.start === start && r.end === end
-    ) || null;
-  };
-
-  // Helper to open the stoplight popup for a range
-  const openPopup = (position, start, end) => {
-    const min = Math.min(start, end);
-    const max = Math.max(start, end);
-    const existingReview = findExistingReview(min, max);
-    setPopupState({
-      position,
-      range: { start: min, end: max },
-      currentState: existingReview?.state || null,
-      issueRef: existingReview?.issueRef || null,
-      path
-    });
-  };
-
-  // Handle click, drag, and shift-click events
+  // Handle glyph margin clicks
   useEffect(() => {
     const currentEditor = editorRef.current;
     if (!currentEditor || !isInteractive) {
       return;
     }
 
-    // Clean up previous handlers
+    // Clean up previous handler
     if (clickDisposableRef.current) {
       clickDisposableRef.current.dispose();
       clickDisposableRef.current = null;
     }
 
-    const disposables = [];
-
-    // onMouseDown — start drag
-    disposables.push(currentEditor.onMouseDown(e => {
+    clickDisposableRef.current = currentEditor.onMouseDown(e => {
       if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
       const lineNumber = e.target.position?.lineNumber;
       if (!lineNumber) return;
 
-      dragStateRef.current = { isDragging: true, startLine: lineNumber };
-      applyDragHighlight(currentEditor, lineNumber, lineNumber);
-    }));
+      // Check if the editor has a multi-line selection that includes this line
+      const selection = currentEditor.getSelection();
+      let start = lineNumber;
+      let end = lineNumber;
 
-    // onMouseMove — extend drag highlight
-    disposables.push(currentEditor.onMouseMove(e => {
-      if (!dragStateRef.current.isDragging) return;
-      const lineNumber = e.target.position?.lineNumber;
-      if (!lineNumber) return;
-      applyDragHighlight(currentEditor, dragStateRef.current.startLine, lineNumber);
-    }));
-
-    // onMouseUp — finalize drag and open popup
-    disposables.push(currentEditor.onMouseUp(e => {
-      if (!dragStateRef.current.isDragging) return;
-      const startLine = dragStateRef.current.startLine;
-      dragStateRef.current = { isDragging: false, startLine: null };
-
-      const lineNumber = e.target.position?.lineNumber || startLine;
-      clearDragHighlight(currentEditor);
-      openPopup({ x: e.event.posx, y: e.event.posy }, startLine, lineNumber);
-    }));
-
-    // Global mouseup — cancel drag if mouse released outside editor
-    const editorDomNode = currentEditor.getDomNode();
-    const handleGlobalMouseUp = (e) => {
-      if (!dragStateRef.current.isDragging) return;
-      // Only cancel if mouseup was outside the editor
-      if (editorDomNode && !editorDomNode.contains(e.target)) {
-        dragStateRef.current = { isDragging: false, startLine: null };
-        clearDragHighlight(currentEditor);
-      }
-    };
-    document.addEventListener('mouseup', handleGlobalMouseUp);
-
-    // Escape key — cancel drag
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        if (dragStateRef.current.isDragging) {
-          dragStateRef.current = { isDragging: false, startLine: null };
-          clearDragHighlight(currentEditor);
+      if (selection && !selection.isEmpty()) {
+        const selStart = selection.startLineNumber;
+        const selEnd = selection.endLineNumber;
+        // If the clicked line falls within the selection, use the selection range
+        if (lineNumber >= selStart && lineNumber <= selEnd) {
+          start = selStart;
+          // If selection ends at column 1 of a line, the user didn't actually
+          // select content on that line — exclude it
+          end = (selection.endColumn === 1 && selEnd > selStart) ? selEnd - 1 : selEnd;
         }
       }
-    };
-    document.addEventListener('keydown', handleKeyDown);
 
-    // Store a single disposable that cleans up everything
-    clickDisposableRef.current = {
-      dispose: () => {
-        disposables.forEach(d => d.dispose());
-        document.removeEventListener('mouseup', handleGlobalMouseUp);
-        document.removeEventListener('keydown', handleKeyDown);
-      }
-    };
+      // Look up existing review for this exact range
+      const reviews = lineReviewsRef.current;
+      const existingReview = reviews?.lineRanges?.find(
+        r => r.start === start && r.end === end
+      ) || null;
+
+      setPopupState({
+        position: { x: e.event.posx, y: e.event.posy },
+        range: { start, end },
+        currentState: existingReview?.state || null,
+        issueRef: existingReview?.issueRef || null,
+        path
+      });
+    });
 
     return () => {
       if (clickDisposableRef.current) {
@@ -311,19 +224,13 @@ export function useLineReviewDecorations(
   useEffect(() => {
     return () => {
       const currentEditor = editorRef.current;
-      if (currentEditor) {
+      if (currentEditor && decorationsRef.current.length > 0) {
         try {
-          if (decorationsRef.current.length > 0) {
-            currentEditor.deltaDecorations(decorationsRef.current, []);
-          }
-          if (dragHighlightRef.current.length > 0) {
-            currentEditor.deltaDecorations(dragHighlightRef.current, []);
-          }
+          currentEditor.deltaDecorations(decorationsRef.current, []);
         } catch (error) {
           // Editor might be disposed, which is fine during cleanup
         }
         decorationsRef.current = [];
-        dragHighlightRef.current = [];
       }
     };
   }, []); // Empty deps - only run cleanup on unmount
