@@ -105,7 +105,7 @@ fn test_single_commit_creates_no_intermediates() {
     let c1 = add_commit(&dir, "file.txt", "line1\nline2\n", "commit 1");
 
     // Review the base commit first to set up head_event_id
-    let base_result = create_event(
+    create_event(
         &mut conn,
         &project_id,
         base_hash.clone(),
