@@ -220,9 +220,9 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                           NEXT
                         </div>
                       )}
-                      {isInSelectedRange && (
+                      {isSelectedTarget && (
                         <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>
-                          {isSelectedTarget ? 'SELECTED' : 'INCLUDED'}
+                          SELECTED
                         </div>
                       )}
                       {isReviewed && !isResolution && (
