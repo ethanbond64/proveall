@@ -409,7 +409,6 @@ fn create_composites_for_new_issues(
     Ok(())
 }
 
-
 fn translate_composite_line_numbers(
     prev_summary_metadata: &str,
     project_path: &str,
