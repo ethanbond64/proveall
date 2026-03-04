@@ -188,6 +188,7 @@ function ReviewProjectPage({
   projectState,
   commit,
   issueId,
+  baseCommit,
   reviewMode = COMMIT_REVIEW_MODE,
   branchContextId,
   onNavigateBack,
@@ -201,6 +202,7 @@ function ReviewProjectPage({
       projectPath={project?.path}
       commit={commit}
       issueId={issueId}
+      baseCommit={baseCommit}
       branchContextId={branchContextId}
     >
       <ReviewProjectPageInner
