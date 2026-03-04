@@ -48,7 +48,11 @@ jobs:
             echo "should_release=true" >> $GITHUB_OUTPUT
 
             # Extract changelog for this version
-            CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/{if (/^## \[/ && !/^## \[$VERSION\]/) exit; print}" CHANGELOG.md | tail -n +2)
+            CHANGELOG=$(awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { found=1; next }
+              found && /^## \[/ { exit }
+              found { print }
+              ' CHANGELOG.md)
 
             # Use heredoc syntax for multiline output
             {
