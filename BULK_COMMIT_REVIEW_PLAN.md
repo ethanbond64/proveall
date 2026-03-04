@@ -19,27 +19,32 @@ Allow users to select a range of unreviewed commits from the project page and re
 
 ### Core Concept
 
-A bulk commit review uses the diff between the **base commit** (the commit at `head_event_id`, i.e. the last reviewed commit) and the **target commit** (the most recent commit the user selected). This is conceptually `git diff <base>...<target>` — the aggregate of all changes across multiple commits.
+A bulk commit review uses the diff between the **base commit** and the **target commit** (the most recent commit the user selected). The backend determines the base commit automatically:
 
-The event created will be associated with the **target commit** hash, but the backend will know the diff was computed against a specific base commit (not just `target^`).
+- If `head_event_id` exists on the `BranchContext`, the base commit is the **commit hash stored on that event** (the last reviewed commit).
+- If `head_event_id` is `None` (no commits reviewed yet), the base commit is the **base branch** (e.g., `main`).
+
+This means the backend already has all the information it needs — no `baseCommit` parameter needs to be passed through the API. The frontend tracks `baseCommit` only for UI display purposes (showing the range in the diff source button).
+
+For single-commit review, this is equivalent to the old behavior: the last reviewed commit is `commit^`, so diffing against `head_event_id`'s commit produces the same result as `commit^ vs commit`.
 
 ### What Changes
 
 | Layer | File | Change |
 |-------|------|--------|
 | Frontend | `ProjectPage.jsx` | Allow clicking any unreviewed commit above `oldestUnreviewedCommit`. Track selected range. Highlight selected commits. Update diff source buttons to show range info. |
-| Frontend | `App.jsx` | Pass `baseCommit` through `reviewContext` alongside `commit`. |
-| Frontend | `ReviewContext.jsx` | Accept and store `baseCommit`. Pass it to all backend API calls. |
-| Frontend | `tauriAPI.js` | Add `baseCommit` parameter to `getReviewFileSystemData`, `getReviewFileData`, and `createEvent`. |
-| Backend | `review_commands.rs` | Accept `base_commit` parameter in review commands. |
-| Backend | `review_service.rs` | Use `base_commit` instead of `commit^` for commit-mode diffs. |
-| Backend | `event_service.rs` | Accept `base_commit` for `create_event`. Use it to find the previous event and propagate xrefs. Create intermediate event rows for skipped commits. |
+| Frontend | `App.jsx` | Pass `baseCommit` through `reviewContext` alongside `commit` (for UI display only). |
+| Frontend | `ReviewContext.jsx` | Accept and store `baseCommit` (for UI display only). API call signatures unchanged. |
+| Frontend | `ReviewProjectPage.jsx` | Pass `baseCommit` prop to provider. |
+| Backend | `review_service.rs` | In commit mode, derive base from `head_event_id`'s commit hash (or base branch) instead of hardcoding `commit^`. |
+| Backend | `event_service.rs` | In `find_previous_event`, use `head_event_id` to find the previous event instead of looking up `commit^`. |
+| Backend | `project_service.rs` | Mark commits older than `head_event_id`'s commit as implicitly reviewed. |
 
 ---
 
 ## Implementation Steps
 
-### Step 1: ProjectPage — Commit Selection UI
+### Step 1: ProjectPage — Commit Selection UI (DONE)
 
 **File: `src/renderer/pages/project/ProjectPage.jsx`**
 
@@ -56,12 +61,12 @@ The event created will be associated with the **target commit** hash, but the ba
 
 5. Update the **Review Actions** panel:
    - When `selectedTargetCommit` is set and differs from `oldestUnreviewedCommit`, show a button: **"Review N Commits"** with sublabel showing the range (`abc1234..def5678`).
-   - The button calls `onNavigateToReview(selectedTargetCommit.commit, COMMIT_REVIEW_MODE, null, oldestUnreviewedCommit.commit)` — passing the base commit (parent of oldest unreviewed, i.e., the last reviewed commit's hash).
+   - The button calls `onNavigateToReview(selectedTargetCommit.commit, COMMIT_REVIEW_MODE, null, baseCommitForBulk)` — passing the base commit for display purposes.
    - When `selectedTargetCommit` is null or equals `oldestUnreviewedCommit`, show the existing "Review Next Commit" button.
 
 6. Clicking a commit that is already selected deselects it (resets to null).
 
-### Step 2: App.jsx — Pass baseCommit Through
+### Step 2: App.jsx — Pass baseCommit Through (DONE)
 
 **File: `src/renderer/App.jsx`**
 
@@ -75,7 +80,7 @@ The event created will be associated with the **target commit** hash, but the ba
 
 2. Pass `reviewContext.baseCommit` to `ReviewProjectPage` as a prop.
 
-### Step 3: ReviewContext — Store and Use baseCommit
+### Step 3: ReviewContext — Store baseCommit (DONE)
 
 **File: `src/renderer/pages/review/ReviewContext.jsx`**
 
@@ -85,59 +90,50 @@ The event created will be associated with the **target commit** hash, but the ba
 
 3. In the `INITIALIZE` action, store `baseCommit`.
 
-4. Pass `baseCommit` to all API calls:
-   - `getReviewFileSystemData(projectId, commit, issueId, mode, branchContextId, baseCommit)`
-   - `getReviewFileData(projectId, commit, issueId, mode, filePath, branchContextId, baseCommit)`
-   - `createEvent(projectId, commit, eventType, newIssues, resolvedIssues, branchContextId, baseCommit)`
+Note: `baseCommit` is stored for frontend display only. The backend API signatures are unchanged — the backend derives the base commit from `head_event_id` on the `BranchContext`.
 
-When `baseCommit` is `null`, the backend falls back to existing behavior (`commit^`).
-
-### Step 4: Tauri API Bindings
+### Step 4: Tauri API Bindings (NO CHANGES NEEDED)
 
 **File: `src/renderer/tauriAPI.js`**
 
-Add `baseCommit` parameter to:
-- `getReviewFileSystemData` → `invoke('get_review_file_system_data', { ..., baseCommit })`
-- `getReviewFileData` → `invoke('get_review_file_data', { ..., baseCommit })`
-- `createEvent` → `invoke('create_event', { ..., baseCommit })`
+No changes. The backend determines the base commit automatically from `head_event_id` on the `BranchContext`. API signatures remain:
+- `getReviewFileSystemData(projectId, commit, issueId, reviewType, branchContextId)`
+- `getReviewFileData(projectId, commit, issueId, reviewType, filePath, branchContextId)`
+- `createEvent(projectId, commit, eventType, newIssues, resolvedIssues, branchContextId)`
 
-### Step 5: Backend Review Commands
+### Step 5: Backend Review Commands (NO CHANGES NEEDED)
 
 **File: `tauri_src/src/commands/review_commands.rs`**
 
-Add `base_commit: Option<String>` parameter to:
-- `get_review_file_system_data`
-- `get_review_file_data`
-
-Pass through to the service layer.
+No changes. The command signatures stay the same since `base_commit` is not passed from the frontend.
 
 ### Step 6: Backend Review Service — Bulk Diff
 
 **File: `tauri_src/src/services/review_service.rs`**
 
 1. In `build_commit_touched_files`:
-   - If `base_commit` is `Some(bc)`, diff `bc..commit` instead of `commit^..commit`.
-   - If `base_commit` is `None`, keep existing behavior (`commit^..commit`).
+   - Look up `branch_context.head_event_id` → get the event → get its commit hash. This is the base commit.
+   - If `head_event_id` exists, diff `base_commit..commit` instead of `commit^..commit`.
+   - If `head_event_id` is `None` (first review ever), diff `base_branch..commit` using `branch_context.base_branch`.
+   - Pass `base_commit` info through so `get_review_file_data` can use it too.
 
 2. In `get_review_file_data` (commit mode):
-   - If `base_commit` is `Some(bc)`, the `diff` content should be `git show <bc>:<path>` instead of `git show <commit>^:<path>`.
-   - If `base_commit` is `None`, keep existing behavior.
+   - Derive the base commit the same way (from `head_event_id` or `base_branch`).
+   - The `diff` content should be `git show <base_commit>:<path>` instead of `git show <commit>^:<path>`.
 
-3. Remove the "event already exists" error in `build_commit_touched_files` for the bulk case — when reviewing a range, the target commit won't have an event yet, but intermediate commits also won't. This check is still valid for single-commit mode.
+3. Remove the "event already exists" error in `build_commit_touched_files` — when reviewing a range, the target commit won't have an event yet, but this check is overly restrictive.
 
 ### Step 7: Backend Event Service — Bulk Event Creation
 
 **File: `tauri_src/src/services/event_service.rs`**
 
-1. Add `base_commit: Option<String>` parameter to `create_event`.
+1. In `find_previous_event` (for commit events):
+   - Instead of looking up `commit^`, look up the `head_event_id` from the `BranchContext` directly. This naturally handles both single and bulk reviews — the previous event is always the one pointed to by `head_event_id`.
+   - Accept `branch_context_id` as a parameter to `find_previous_event`.
 
-2. In `find_previous_event` (for commit events):
-   - If `base_commit` is `Some(bc)`, look up the event matching hash `bc` instead of `commit^`.
-   - If `base_commit` is `None`, keep existing behavior (look up `commit^`).
+2. The single event created will have `hash = target_commit`. The xref propagation uses the `head_event_id` event to carry forward unresolved issues, translating line numbers across the full diff range (`base_commit..target_commit`).
 
-3. The single event created will have `hash = target_commit`. The xref propagation uses the base commit's event to carry forward unresolved issues, translating line numbers across the full diff range (`base_commit..target_commit`).
-
-4. After the event is created and `head_event_id` is updated, all the intermediate commits are effectively "skipped" — they don't get individual events. The project state page will see them as unreviewed in the `events` table, but since `head_event_id` has advanced past them, they're covered by the bulk review.
+3. After the event is created and `head_event_id` is updated, all the intermediate commits are effectively "skipped" — they don't get individual events.
 
 ### Step 8: Project State — Handle Bulk-Reviewed Commits
 
@@ -167,12 +163,12 @@ Commit list (newest first):
 ```
 
 1. User clicks C5. `selectedRange = [C5, C4, C3]`. Highlight applied.
-2. Diff source button: "Review 3 Commits (C3..C5)". Click navigates with `commit=C5, baseCommit=C2`.
-3. `ReviewContext` calls `getReviewFileSystemData(projectId, C5, null, 'commit', bcId, C2)`.
-4. Backend diffs `C2..C5` to get all touched files.
+2. Diff source button: "Review 3 Commits (C3..C5)". Click navigates with `commit=C5, baseCommit=C2` (baseCommit for display only).
+3. `ReviewContext` calls `getReviewFileSystemData(projectId, C5, null, 'commit', bcId)`.
+4. Backend looks up `head_event_id` → finds C2's event → diffs `C2..C5` to get all touched files.
 5. User reviews files. Monaco shows `git show C2:<path>` as original, `git show C5:<path>` as modified.
-6. Save calls `createEvent(projectId, C5, 'commit', newIssues, resolved, bcId, C2)`.
-7. Backend creates event with `hash=C5`, propagates xrefs from C2's event, translates lines using diff `C2..C5`, updates `head_event_id` to the new event.
+6. Save calls `createEvent(projectId, C5, 'commit', newIssues, resolved, bcId)`.
+7. Backend finds previous event via `head_event_id` (C2's event), creates event with `hash=C5`, propagates xrefs from C2's event, translates lines using diff `C2..C5`, updates `head_event_id` to the new event.
 8. Back on ProjectPage, `getProjectState` returns: C5 has event row (reviewed), C4/C3 are older than head's commit so marked reviewed.
 
 ---
@@ -195,9 +191,9 @@ Commit list (newest first):
 
 ## Edge Cases
 
-1. **Single commit selected** (clicking `oldestUnreviewedCommit`): `baseCommit` is `null`, existing single-commit flow is used unchanged.
+1. **Single commit selected** (clicking `oldestUnreviewedCommit`): Backend uses `head_event_id`'s commit as base, which is `commit^` — identical to old behavior.
 
-2. **No previous event exists** (first review ever): `baseCommit` should be the merge-base with the base branch. The frontend computes this: if `oldestUnreviewedCommit` is the very first commit in the range, `baseCommit` is `null` and the backend uses `commit^` or the base branch as appropriate.
+2. **No previous event exists** (first review ever): `head_event_id` is `None`. Backend falls back to `base_branch` for the diff base (or `commit^` for single commit if appropriate).
 
 3. **Deselection**: Clicking a selected commit deselects it. Clicking a different commit changes the selection.
 
@@ -210,13 +206,10 @@ Commit list (newest first):
 | File | Type of Change |
 |------|---------------|
 | `src/renderer/pages/project/ProjectPage.jsx` | Selection state, highlight, range button |
-| `src/renderer/App.jsx` | Pass `baseCommit` in reviewContext |
-| `src/renderer/pages/review/ReviewContext.jsx` | Store `baseCommit`, pass to APIs |
+| `src/renderer/App.jsx` | Pass `baseCommit` in reviewContext (display only) |
+| `src/renderer/pages/review/ReviewContext.jsx` | Store `baseCommit` (display only) |
 | `src/renderer/pages/review/ReviewProjectPage.jsx` | Pass `baseCommit` prop to provider |
-| `src/renderer/tauriAPI.js` | Add `baseCommit` to 3 API calls |
 | `src/renderer/styles.css` | Selection highlight styles |
-| `tauri_src/src/commands/review_commands.rs` | Add `base_commit` param |
-| `tauri_src/src/commands/event_commands.rs` | Add `base_commit` param |
-| `tauri_src/src/services/review_service.rs` | Use `base_commit` for diff range |
-| `tauri_src/src/services/event_service.rs` | Use `base_commit` for prev event lookup |
+| `tauri_src/src/services/review_service.rs` | Derive base from `head_event_id`, use for diff range |
+| `tauri_src/src/services/event_service.rs` | Use `head_event_id` for prev event lookup |
 | `tauri_src/src/services/project_service.rs` | Mark bulk-covered commits as reviewed |
