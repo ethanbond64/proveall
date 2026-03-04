@@ -268,8 +268,11 @@ export function useLineReviewDecorations(
     }));
 
     // Global mouseup — cancel drag if mouse released outside editor
-    const handleGlobalMouseUp = () => {
-      if (dragStateRef.current.isDragging) {
+    const editorDomNode = currentEditor.getDomNode();
+    const handleGlobalMouseUp = (e) => {
+      if (!dragStateRef.current.isDragging) return;
+      // Only cancel if mouseup was outside the editor
+      if (editorDomNode && !editorDomNode.contains(e.target)) {
         dragStateRef.current = { isDragging: false, startLine: null };
         clearDragHighlight(currentEditor);
       }
