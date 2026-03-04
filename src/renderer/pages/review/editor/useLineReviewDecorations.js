@@ -19,16 +19,21 @@ export function useLineReviewDecorations(
   const selectionDisposableRef = useRef(null);
   const editorRef = useRef(null);
   const lineReviewsRef = useRef(lineReviews);
+  const changeBlocksRef = useRef(changeBlocks);
 
   // Store editor reference to ensure stability
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
 
-  // Keep lineReviews ref in sync for use in event handlers
+  // Keep refs in sync for use in event handlers
   useEffect(() => {
     lineReviewsRef.current = lineReviews;
   }, [lineReviews]);
+
+  useEffect(() => {
+    changeBlocksRef.current = changeBlocks;
+  }, [changeBlocks]);
 
   // Update decorations when lineReviews or changeBlocks change
   useEffect(() => {
@@ -239,12 +244,38 @@ export function useLineReviewDecorations(
       clickDisposableRef.current = null;
     }
 
-    clickDisposableRef.current = currentEditor.onMouseDown(e => {
+    const disposables = [];
+    let lastClickTime = 0;
+    let lastClickLine = null;
+    const DOUBLE_CLICK_MS = 400;
+
+    disposables.push(currentEditor.onMouseDown(e => {
       if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
       const lineNumber = e.target.position?.lineNumber;
       if (!lineNumber) return;
 
-      // Check if the editor has a multi-line selection that includes this line
+      const now = Date.now();
+      const isDoubleClick = (now - lastClickTime < DOUBLE_CLICK_MS) && (lastClickLine === lineNumber);
+      lastClickTime = now;
+      lastClickLine = lineNumber;
+
+      // Double-click: select the entire hunk containing this line
+      if (isDoubleClick) {
+        const blocks = changeBlocksRef.current || [];
+        const block = blocks.find(b => lineNumber >= b.startLine && lineNumber <= b.endLine);
+        if (block) {
+          // Set editor selection to the hunk range — this triggers the
+          // selection highlight listener which will add blue outlines
+          const model = currentEditor.getModel();
+          const endCol = model ? model.getLineMaxColumn(block.endLine) : 1;
+          currentEditor.setSelection(new monaco.Selection(
+            block.startLine, 1, block.endLine, endCol
+          ));
+        }
+        return;
+      }
+
+      // Single click: open popup for clicked line or current selection
       const selection = currentEditor.getSelection();
       let start = lineNumber;
       let end = lineNumber;
@@ -274,7 +305,11 @@ export function useLineReviewDecorations(
         issueRef: existingReview?.issueRef || null,
         path
       });
-    });
+    }));
+
+    clickDisposableRef.current = {
+      dispose: () => disposables.forEach(d => d.dispose())
+    };
 
     return () => {
       if (clickDisposableRef.current) {
