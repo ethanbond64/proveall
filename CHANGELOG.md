@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-04
+
 ### Added
 - Ability to bulk review multiple commits by selecting a more recent commit on the project page.
 - Ability to line review lines that were not touched in the diff in a commit review.
