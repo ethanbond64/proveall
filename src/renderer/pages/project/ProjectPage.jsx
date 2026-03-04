@@ -136,6 +136,12 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     if (clickedIndex < 0 || clickedIndex > oldestUnreviewedIndex) return;
     if (event.id !== null || event.event_type !== 'commit') return;
 
+    // If this is the next-to-review commit, navigate directly to review
+    if (event.commit === oldestUnreviewedCommit.commit) {
+      onNavigateToReview(event.commit, COMMIT_REVIEW_MODE);
+      return;
+    }
+
     // Toggle: if clicking the already-selected target, deselect
     if (selectedTargetCommit === event.commit) {
       setSelectedTargetCommit(null);
