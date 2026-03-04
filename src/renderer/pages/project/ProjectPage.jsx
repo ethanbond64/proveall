@@ -39,13 +39,13 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   // Index of the oldest unreviewed commit in the commits array
   const oldestUnreviewedIndex = useMemo(() => {
     if (!oldestUnreviewedCommit) return -1;
-    return commits.findIndex(e => e.commit === oldestUnreviewedCommit.commit);
+    return commits.findIndex(e => e.commit === oldestUnreviewedCommit.commit && e.event_type === 'commit');
   }, [commits, oldestUnreviewedCommit]);
 
   // Compute the set of commits in the selected bulk range
   const selectedRange = useMemo(() => {
     if (!selectedTargetCommit || !oldestUnreviewedCommit) return new Set();
-    const targetIndex = commits.findIndex(e => e.commit === selectedTargetCommit);
+    const targetIndex = commits.findIndex(e => e.commit === selectedTargetCommit && e.event_type === 'commit');
     if (targetIndex < 0 || oldestUnreviewedIndex < 0) return new Set();
     // commits are newest-first, so target is at a lower index than oldest
     const rangeCommits = new Set();
@@ -131,7 +131,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   const handleCommitClick = (event) => {
     if (!oldestUnreviewedCommit) return;
 
-    const clickedIndex = commits.findIndex(e => e.commit === event.commit);
+    const clickedIndex = commits.findIndex(e => e.commit === event.commit && e.event_type === 'commit');
     // Only allow clicking unreviewed commits at or above oldestUnreviewedCommit
     if (clickedIndex < 0 || clickedIndex > oldestUnreviewedIndex) return;
     if (event.id !== null || event.event_type !== 'commit') return;
