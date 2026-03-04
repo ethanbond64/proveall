@@ -31,6 +31,7 @@ pub struct LlmState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    utils::fix_path_env();
     // Get the platform-specific application data directory
     // This is where desktop apps should store user data:
     // - macOS: ~/Library/Application Support/com.proveall/
