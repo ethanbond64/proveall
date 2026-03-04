@@ -34,13 +34,21 @@ export function useLineReviewDecorations(
 
     // Function to apply decorations
     const applyDecorations = () => {
-      // Generate decorations from line reviews
       const decorations = [];
+      const lineCount = model.getLineCount();
 
-      // Create a map to track which lines have been reviewed
+      // Build a set of lines that are within diff change blocks (required review)
+      const diffLines = new Set();
+      if (changeBlocks && changeBlocks.length > 0) {
+        changeBlocks.forEach(block => {
+          for (let line = block.startLine; line <= block.endLine; line++) {
+            diffLines.add(line);
+          }
+        });
+      }
+
+      // Build a map of explicitly reviewed lines
       const reviewedLines = new Map();
-
-      // First, collect all reviewed line ranges
       if (lineReviews && lineReviews.lineRanges && lineReviews.lineRanges.length > 0) {
         lineReviews.lineRanges.forEach(range => {
           for (let line = range.start; line <= range.end; line++) {
@@ -49,57 +57,74 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Now process all change blocks
-      if (changeBlocks && changeBlocks.length > 0) {
-        changeBlocks.forEach(block => {
-          for (let line = block.startLine; line <= block.endLine; line++) {
-            // Check if this line has a specific review
-            const reviewState = reviewedLines.get(line);
+      // Iterate over ALL lines in the file
+      for (let line = 1; line <= lineCount; line++) {
+        const reviewState = reviewedLines.get(line);
+        const isDiffLine = diffLines.has(line);
 
-            if (reviewState) {
-              // Line has been reviewed - use that state
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: `line-review-dot-${reviewState}`,
-                  glyphMarginHoverMessage: {
-                    value: `Review status: ${reviewState}${isInteractive ? ' (click to change)' : ''}`
-                  }
-                }
-              });
-            } else if (lineReviews && lineReviews.defaultState) {
-              // No specific review, but file has a default state
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: `line-review-dot-${lineReviews.defaultState}`,
-                  glyphMarginHoverMessage: {
-                    value: `File default: ${lineReviews.defaultState}${isInteractive ? ' (click to change)' : ''}`
-                  }
-                }
-              });
-            } else {
-              // Line hasn't been reviewed
-              // In read-only mode (branch/issue), default to green
-              // In interactive mode (commit), show as unreviewed
-              const className = isInteractive ? 'line-review-dot-unreviewed' : 'line-review-dot-green';
-              const hoverMessage = isInteractive ? 'Click to review' : 'Not explicitly reviewed (assumed good)';
-
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: className,
-                  glyphMarginHoverMessage: {
-                    value: hoverMessage
-                  }
-                }
-              });
+        if (reviewState) {
+          // Line has an explicit review — show colored dot
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: `line-review-dot-${reviewState}`,
+              glyphMarginHoverMessage: {
+                value: `Review status: ${reviewState}${isInteractive ? ' (click to change)' : ''}`
+              }
             }
+          });
+        } else if (lineReviews && lineReviews.defaultState) {
+          // No explicit review, but file has a default state
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: `line-review-dot-${lineReviews.defaultState}`,
+              glyphMarginHoverMessage: {
+                value: `File default: ${lineReviews.defaultState}${isInteractive ? ' (click to change)' : ''}`
+              }
+            }
+          });
+        } else if (isDiffLine) {
+          // Unreviewed diff line — required review
+          if (isInteractive) {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, 1),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: 'line-review-dot-unreviewed-required',
+                glyphMarginHoverMessage: {
+                  value: 'Click to review (required — part of diff)'
+                }
+              }
+            });
+          } else {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, 1),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: 'line-review-dot-green',
+                glyphMarginHoverMessage: {
+                  value: 'Not explicitly reviewed (assumed good)'
+                }
+              }
+            });
           }
-        });
+        } else if (isInteractive) {
+          // Non-diff line, no review — optional, plain gray dot
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: 'line-review-dot-unreviewed',
+              glyphMarginHoverMessage: {
+                value: 'Click to review (optional)'
+              }
+            }
+          });
+        }
+        // In read-only mode, non-diff lines with no review get no decoration
       }
 
       // Clear existing decorations and apply new ones in a single operation
