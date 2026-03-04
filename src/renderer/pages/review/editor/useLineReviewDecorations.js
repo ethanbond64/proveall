@@ -218,7 +218,7 @@ export function useLineReviewDecorations(
         clickDisposableRef.current = null;
       }
     };
-  }, [isInteractive, path]);
+  }, [editor, isInteractive, path]);
 
   // Clean up decorations only when component unmounts
   useEffect(() => {
