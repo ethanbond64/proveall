@@ -1284,7 +1284,8 @@ body {
 .line-review-dot-red,
 .line-review-dot-yellow,
 .line-review-dot-green,
-.line-review-dot-unreviewed {
+.line-review-dot-unreviewed,
+.line-review-dot-unreviewed-required {
   cursor: pointer !important;
   width: 12px !important;
   height: 12px !important;
@@ -1316,6 +1317,10 @@ body {
   background-color: #666666 !important;
 }
 
+.line-review-dot-unreviewed-required {
+  background-color: #999999 !important;
+}
+
 .line-review-dot-red:hover {
   background-color: #f44336 !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -1324,6 +1329,17 @@ body {
 .line-review-dot-unreviewed:hover {
   background-color: #888888 !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+.line-review-dot-unreviewed-required:hover {
+  background-color: #aaaaaa !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Blue outline on glyph dots when lines are selected in the editor */
+.line-review-dot-selected {
+  border: 2px solid #4a9eff !important;
+  border-radius: 50% !important;
 }
 
 .line-review-dot-yellow:hover {

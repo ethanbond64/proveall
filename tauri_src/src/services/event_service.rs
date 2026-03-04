@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
+use diesel::Connection;
 
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
 use crate::db::schema::{branch_context, issues};
@@ -20,6 +21,28 @@ use crate::repositories::{
 use crate::utils::git::{diff_changed_files, run_git};
 
 pub fn create_event(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    commit: String,
+    event_type: String,
+    new_issues: Vec<NewIssueInput>,
+    resolved_issues: Vec<String>,
+    branch_context_id: &str,
+) -> Result<CreateEventResponse, AppError> {
+    conn.transaction(|conn| {
+        create_event_inner(
+            conn,
+            project_id,
+            commit,
+            event_type,
+            new_issues,
+            resolved_issues,
+            branch_context_id,
+        )
+    })
+}
+
+fn create_event_inner(
     conn: &mut SqliteConnection,
     project_id: &str,
     commit: String,

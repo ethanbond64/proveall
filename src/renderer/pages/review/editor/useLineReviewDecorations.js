@@ -13,14 +13,27 @@ export function useLineReviewDecorations(
   path
 ) {
   const decorationsRef = useRef([]);
+  const selectionHighlightRef = useRef([]);
   const [popupState, setPopupState] = useState(null);
   const clickDisposableRef = useRef(null);
+  const selectionDisposableRef = useRef(null);
   const editorRef = useRef(null);
+  const lineReviewsRef = useRef(lineReviews);
+  const changeBlocksRef = useRef(changeBlocks);
 
   // Store editor reference to ensure stability
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  // Keep refs in sync for use in event handlers
+  useEffect(() => {
+    lineReviewsRef.current = lineReviews;
+  }, [lineReviews]);
+
+  useEffect(() => {
+    changeBlocksRef.current = changeBlocks;
+  }, [changeBlocks]);
 
   // Update decorations when lineReviews or changeBlocks change
   useEffect(() => {
@@ -34,13 +47,21 @@ export function useLineReviewDecorations(
 
     // Function to apply decorations
     const applyDecorations = () => {
-      // Generate decorations from line reviews
       const decorations = [];
+      const lineCount = model.getLineCount();
 
-      // Create a map to track which lines have been reviewed
+      // Build a set of lines that are within diff change blocks (required review)
+      const diffLines = new Set();
+      if (changeBlocks && changeBlocks.length > 0) {
+        changeBlocks.forEach(block => {
+          for (let line = block.startLine; line <= block.endLine; line++) {
+            diffLines.add(line);
+          }
+        });
+      }
+
+      // Build a map of explicitly reviewed lines
       const reviewedLines = new Map();
-
-      // First, collect all reviewed line ranges
       if (lineReviews && lineReviews.lineRanges && lineReviews.lineRanges.length > 0) {
         lineReviews.lineRanges.forEach(range => {
           for (let line = range.start; line <= range.end; line++) {
@@ -49,57 +70,74 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Now process all change blocks
-      if (changeBlocks && changeBlocks.length > 0) {
-        changeBlocks.forEach(block => {
-          for (let line = block.startLine; line <= block.endLine; line++) {
-            // Check if this line has a specific review
-            const reviewState = reviewedLines.get(line);
+      // Iterate over ALL lines in the file
+      for (let line = 1; line <= lineCount; line++) {
+        const reviewState = reviewedLines.get(line);
+        const isDiffLine = diffLines.has(line);
 
-            if (reviewState) {
-              // Line has been reviewed - use that state
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: `line-review-dot-${reviewState}`,
-                  glyphMarginHoverMessage: {
-                    value: `Review status: ${reviewState}${isInteractive ? ' (click to change)' : ''}`
-                  }
-                }
-              });
-            } else if (lineReviews && lineReviews.defaultState) {
-              // No specific review, but file has a default state
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: `line-review-dot-${lineReviews.defaultState}`,
-                  glyphMarginHoverMessage: {
-                    value: `File default: ${lineReviews.defaultState}${isInteractive ? ' (click to change)' : ''}`
-                  }
-                }
-              });
-            } else {
-              // Line hasn't been reviewed
-              // In read-only mode (branch/issue), default to green
-              // In interactive mode (commit), show as unreviewed
-              const className = isInteractive ? 'line-review-dot-unreviewed' : 'line-review-dot-green';
-              const hoverMessage = isInteractive ? 'Click to review' : 'Not explicitly reviewed (assumed good)';
-
-              decorations.push({
-                range: new monaco.Range(line, 1, line, 1),
-                options: {
-                  isWholeLine: false,
-                  glyphMarginClassName: className,
-                  glyphMarginHoverMessage: {
-                    value: hoverMessage
-                  }
-                }
-              });
+        if (reviewState) {
+          // Line has an explicit review — show colored dot
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: `line-review-dot-${reviewState}`,
+              glyphMarginHoverMessage: {
+                value: `Review status: ${reviewState}${isInteractive ? ' (click to change)' : ''}`
+              }
             }
+          });
+        } else if (lineReviews && lineReviews.defaultState) {
+          // No explicit review, but file has a default state
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: `line-review-dot-${lineReviews.defaultState}`,
+              glyphMarginHoverMessage: {
+                value: `File default: ${lineReviews.defaultState}${isInteractive ? ' (click to change)' : ''}`
+              }
+            }
+          });
+        } else if (isDiffLine) {
+          // Unreviewed diff line — required review
+          if (isInteractive) {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, 1),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: 'line-review-dot-unreviewed-required',
+                glyphMarginHoverMessage: {
+                  value: 'Click to review (required — part of diff)'
+                }
+              }
+            });
+          } else {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, 1),
+              options: {
+                isWholeLine: false,
+                glyphMarginClassName: 'line-review-dot-green',
+                glyphMarginHoverMessage: {
+                  value: 'Not explicitly reviewed (assumed good)'
+                }
+              }
+            });
           }
-        });
+        } else if (isInteractive) {
+          // Non-diff line, no review — optional, plain gray dot
+          decorations.push({
+            range: new monaco.Range(line, 1, line, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: 'line-review-dot-unreviewed',
+              glyphMarginHoverMessage: {
+                value: 'Click to review (optional)'
+              }
+            }
+          });
+        }
+        // In read-only mode, non-diff lines with no review get no decoration
       }
 
       // Clear existing decorations and apply new ones in a single operation
@@ -131,38 +169,122 @@ export function useLineReviewDecorations(
     };
   }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
 
-  // Handle click events separately to avoid re-attaching on every update
+  // Helper to apply blue outline highlights to a range of glyph dots
+  const applyBlueHighlight = (currentEditor, startLine, endLine) => {
+    const decorations = [];
+    for (let line = startLine; line <= endLine; line++) {
+      decorations.push({
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+          isWholeLine: false,
+          glyphMarginClassName: 'line-review-dot-selected',
+        }
+      });
+    }
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        decorations
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
+  const clearBlueHighlight = (currentEditor) => {
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        []
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
+  // Highlight glyph dots with blue outline when lines are selected in the editor
   useEffect(() => {
-    // Use stable editor reference
+    const currentEditor = editorRef.current;
+    if (!currentEditor || !isInteractive) return;
+
+    if (selectionDisposableRef.current) {
+      selectionDisposableRef.current.dispose();
+      selectionDisposableRef.current = null;
+    }
+
+    const updateSelectionHighlight = () => {
+      const selection = currentEditor.getSelection();
+
+      if (selection && !selection.isEmpty()) {
+        const startLine = selection.startLineNumber;
+        let endLine = selection.endLineNumber;
+        if (selection.endColumn === 1 && endLine > startLine) {
+          endLine = endLine - 1;
+        }
+        applyBlueHighlight(currentEditor, startLine, endLine);
+      } else {
+        clearBlueHighlight(currentEditor);
+      }
+    };
+
+    selectionDisposableRef.current = currentEditor.onDidChangeCursorSelection(updateSelectionHighlight);
+
+    return () => {
+      if (selectionDisposableRef.current) {
+        selectionDisposableRef.current.dispose();
+        selectionDisposableRef.current = null;
+      }
+      try {
+        if (currentEditor && selectionHighlightRef.current.length > 0) {
+          currentEditor.deltaDecorations(selectionHighlightRef.current, []);
+          selectionHighlightRef.current = [];
+        }
+      } catch (e) {
+        selectionHighlightRef.current = [];
+      }
+    };
+  }, [editor, isInteractive]);
+
+  // Handle glyph margin clicks
+  useEffect(() => {
     const currentEditor = editorRef.current;
     if (!currentEditor || !isInteractive) {
       return;
     }
 
-    // Clean up previous click handler if it exists
+    // Clean up previous handler
     if (clickDisposableRef.current) {
       clickDisposableRef.current.dispose();
       clickDisposableRef.current = null;
     }
 
-    // Add click handler
-    clickDisposableRef.current = currentEditor.onMouseDown(e => {
-      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-        const lineNumber = e.target.position?.lineNumber;
-        if (!lineNumber) return;
+    const disposables = [];
+    let lastClickTime = 0;
+    let lastClickLine = null;
+    const DOUBLE_CLICK_MS = 400;
 
-        // Find which block this line belongs to
-        const block = changeBlocks.find(
-          b => lineNumber >= b.startLine && lineNumber <= b.endLine
-        );
+    disposables.push(currentEditor.onMouseDown(e => {
+      if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+      const lineNumber = e.target.position?.lineNumber;
+      if (!lineNumber) return;
 
+      const now = Date.now();
+      const isDoubleClick = (now - lastClickTime < DOUBLE_CLICK_MS) && (lastClickLine === lineNumber);
+      lastClickTime = now;
+      lastClickLine = lineNumber;
+
+      // Double-click on a diff line: highlight the entire hunk and open popup
+      if (isDoubleClick) {
+        const blocks = changeBlocksRef.current || [];
+        const block = blocks.find(b => lineNumber >= b.startLine && lineNumber <= b.endLine);
         if (block) {
-          // Find existing review for this range
-          const existingReview = lineReviews?.lineRanges?.find(
-            r => r.start === block.startLine && r.end === block.endLine
-          );
+          applyBlueHighlight(currentEditor, block.startLine, block.endLine);
 
-          // Set popup state with position and current review info
+          const reviews = lineReviewsRef.current;
+          const existingReview = reviews?.lineRanges?.find(
+            r => r.start === block.startLine && r.end === block.endLine
+          ) || null;
+
           setPopupState({
             position: { x: e.event.posx, y: e.event.posy },
             range: { start: block.startLine, end: block.endLine },
@@ -171,8 +293,44 @@ export function useLineReviewDecorations(
             path
           });
         }
+        return;
       }
-    });
+
+      // Single click: open popup for clicked line or current selection
+      const selection = currentEditor.getSelection();
+      let start = lineNumber;
+      let end = lineNumber;
+
+      if (selection && !selection.isEmpty()) {
+        const selStart = selection.startLineNumber;
+        const selEnd = selection.endLineNumber;
+        // If the clicked line falls within the selection, use the selection range
+        if (lineNumber >= selStart && lineNumber <= selEnd) {
+          start = selStart;
+          // If selection ends at column 1 of a line, the user didn't actually
+          // select content on that line — exclude it
+          end = (selection.endColumn === 1 && selEnd > selStart) ? selEnd - 1 : selEnd;
+        }
+      }
+
+      // Look up existing review for this exact range
+      const reviews = lineReviewsRef.current;
+      const existingReview = reviews?.lineRanges?.find(
+        r => r.start === start && r.end === end
+      ) || null;
+
+      setPopupState({
+        position: { x: e.event.posx, y: e.event.posy },
+        range: { start, end },
+        currentState: existingReview?.state || null,
+        issueRef: existingReview?.issueRef || null,
+        path
+      });
+    }));
+
+    clickDisposableRef.current = {
+      dispose: () => disposables.forEach(d => d.dispose())
+    };
 
     return () => {
       if (clickDisposableRef.current) {
@@ -180,21 +338,25 @@ export function useLineReviewDecorations(
         clickDisposableRef.current = null;
       }
     };
-  }, [isInteractive, changeBlocks, lineReviews, path]);
+  }, [editor, isInteractive, path]);
 
   // Clean up decorations only when component unmounts
   useEffect(() => {
     return () => {
-      // Use the stable editor reference for cleanup
       const currentEditor = editorRef.current;
-      if (currentEditor && decorationsRef.current.length > 0) {
+      if (currentEditor) {
         try {
-          currentEditor.deltaDecorations(decorationsRef.current, []);
-          decorationsRef.current = [];
+          if (decorationsRef.current.length > 0) {
+            currentEditor.deltaDecorations(decorationsRef.current, []);
+          }
+          if (selectionHighlightRef.current.length > 0) {
+            currentEditor.deltaDecorations(selectionHighlightRef.current, []);
+          }
         } catch (error) {
           // Editor might be disposed, which is fine during cleanup
-          decorationsRef.current = [];
         }
+        decorationsRef.current = [];
+        selectionHighlightRef.current = [];
       }
     };
   }, []); // Empty deps - only run cleanup on unmount

@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-04
+
 ### Added
 - Ability to bulk review multiple commits by selecting a more recent commit on the project page.
+- Ability to line review lines that were not touched in the diff in a commit review.
+
+### Changed
+- Line level review now will apply the review to all lines selected by the cursor (or just the single line if none).
+- Double click commit chunks to select the full commit chunk for review.
+- Blue outline to signify which lines are selected for review. 
 
 ### Fixed
 - Issue with resolving shell's full PATH for built app.
