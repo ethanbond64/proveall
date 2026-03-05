@@ -187,8 +187,6 @@ fn create_intermediate_events(
 
     let all_hashes: Vec<&str> = log_output.lines().filter(|l| !l.is_empty()).collect();
 
-    println!("all hashes {:?}", all_hashes);
-
     // Remove the target commit (first in the list) and reverse to chronological order
     let intermediate_hashes: Vec<&str> = all_hashes
         .iter()
@@ -196,9 +194,6 @@ fn create_intermediate_events(
         .copied()
         .rev()
         .collect();
-
-    println!("intermediate hashes {:?}", intermediate_hashes);
-
 
     if intermediate_hashes.is_empty() {
         return Ok(previous_event.cloned());
@@ -208,7 +203,6 @@ fn create_intermediate_events(
     let mut current_prev_event: Option<crate::models::event::Event> = previous_event.cloned();
 
     for hash in intermediate_hashes {
-        println!("Checking intermediate hash {}", hash);
         let summary = run_git(project_path, &["log", "-1", "--format=%s", hash])
             .map(|o| o.stdout.trim().to_string())
             .unwrap_or_default();
@@ -222,8 +216,6 @@ fn create_intermediate_events(
                 summary,
             ),
         )?;
-
-        println!("Created intermediate event");
 
         // Only propagate xrefs if there is a previous event to propagate from
         if let Some(ref prev) = current_prev_event {

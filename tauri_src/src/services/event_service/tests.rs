@@ -420,7 +420,12 @@ fn test_first_review_on_branch_with_multiple_commits_creates_intermediates() {
 
     // Create 3 commits on the feature branch
     let c1 = add_commit(&dir, "file.txt", "line1\nline2\n", "feature commit 1");
-    let c2 = add_commit(&dir, "file.txt", "line1\nline2\nline3\n", "feature commit 2");
+    let c2 = add_commit(
+        &dir,
+        "file.txt",
+        "line1\nline2\nline3\n",
+        "feature commit 2",
+    );
     let c3 = add_commit(
         &dir,
         "file.txt",
