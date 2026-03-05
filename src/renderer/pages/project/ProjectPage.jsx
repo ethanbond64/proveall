@@ -3,7 +3,7 @@ import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
@@ -168,25 +168,43 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   return (
     <div className="project-page-container">
       <div className="project-page-header">
-        <button
-          className="back-button"
-          onClick={onNavigateBack}
-          title="Back to Project Menu"
-        >
-          ‹ Back
-        </button>
-        <img src={logoImage} alt="PR Tool" className="project-page-logo" />
-        <div className="project-info">
-          <span className="project-name">{project?.path?.split('/').pop() || 'Project'}</span>
+        <div className="project-header-row">
+          <button
+            className="header-icon-btn"
+            onClick={onNavigateBack}
+            title="Back to Project Menu"
+          >
+            ‹
+          </button>
+          <img src={logoImage} alt="PR Tool" className="project-page-logo" />
+          <div className="project-header-spacer" />
+          <button
+            className="header-icon-btn"
+            onClick={handlePageRefresh}
+            disabled={isRefreshingPage || isLoading}
+            title="Refresh commits and check for changes"
+          >
+            ⟲
+          </button>
+          <button
+            className="header-icon-btn"
+            onClick={onShowSettings}
+            title="Settings"
+          >
+            ⚙
+          </button>
         </div>
-        <button
-          className="page-refresh-btn"
-          onClick={handlePageRefresh}
-          disabled={isRefreshingPage || isLoading}
-          title="Refresh commits and check for changes"
-        >
-          {isRefreshingPage ? 'Refreshing...' : '⟲ Refresh'}
-        </button>
+        <div className="project-header-row">
+          <span className="project-name">{project?.path?.split('/').pop() || 'Project'}</span>
+          {branchData.branch && (
+            <span className="project-branch-info">
+              {branchData.branch}
+              {branchData.base_branch && branchData.branch !== branchData.base_branch && (
+                <> ← {branchData.base_branch}</>
+              )}
+            </span>
+          )}
+        </div>
       </div>
       <div className="project-page-layout">
         {/* Left half - Commit History */}

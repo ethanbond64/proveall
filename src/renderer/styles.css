@@ -994,31 +994,74 @@ body {
 
 .project-page-header {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 15px;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #333;
   flex-shrink: 0;
 }
 
+.project-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-header-spacer {
+  flex: 1;
+}
+
 .project-page-logo {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   flex-shrink: 0;
 }
 
-.project-info {
+/* Unified icon button for project header */
+.header-icon-btn {
+  background-color: #3c3c3c;
+  color: #cccccc;
+  border: 1px solid #555;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.header-icon-btn:hover:not(:disabled) {
+  background-color: #505050;
+}
+
+.header-icon-btn:active:not(:disabled) {
+  background-color: #2a2a2a;
+}
+
+.header-icon-btn:disabled {
+  background-color: #2a2a2a;
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .project-name {
   font-size: 14px;
   font-weight: 600;
   color: #cccccc;
+}
+
+.project-branch-info {
+  font-size: 12px;
+  color: #888;
+  font-weight: 400;
 }
 
 /* Review Mode Toggle */
@@ -1107,37 +1150,6 @@ body {
   transform: translateX(0);
 }
 
-/* Page Refresh Button - for ProjectPage */
-.page-refresh-btn {
-  background-color: #3c3c3c;
-  color: #cccccc;
-  border: 1px solid #555;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.page-refresh-btn:hover:not(:disabled) {
-  background-color: #505050;
-}
-
-.page-refresh-btn:active:not(:disabled) {
-  background-color: #2a2a2a;
-}
-
-.page-refresh-btn:disabled {
-  background-color: #2a2a2a;
-  color: #666;
-  cursor: not-allowed;
-  opacity: 0.5;
-}
 
 /* Settings Page Styles */
 .settings-page {

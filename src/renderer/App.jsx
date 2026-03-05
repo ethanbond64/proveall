@@ -99,14 +99,6 @@ function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-left">
-        {/* TODO logo and name */}
-        </div>
-        <div className="header-right">
-          <button className="gear-btn" onClick={() => setShowSettings(true)} title="Settings">&#9881;</button>
-        </div>
-      </header>
 
       {showSettings ? (
         <SettingsPage onBack={() => setShowSettings(false)} />
@@ -124,6 +116,7 @@ function App() {
           onNavigateBack={handleNavigateToMenu}
           fixingIssueId={fixingIssueId}
           setFixingIssueId={setFixingIssueId}
+          onShowSettings={() => setShowSettings(true)}
         />
       ) : (
         <ReviewProjectPage
