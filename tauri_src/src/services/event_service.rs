@@ -163,13 +163,20 @@ fn create_intermediate_events(
     project_path: &str,
     branch_context_id: &str,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
-    let Some(prev_event) = previous_event else {
-        return Ok(None);
+    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
+
+    let base_commit_owned: Option<String> = match previous_event {
+        Some(prev) => prev.hash.clone(),
+        None => {
+            // First review on this branch — use the HEAD of the base branch as the starting point
+            run_git(project_path, &["rev-parse", &branch_context.base_branch])
+                .ok()
+                .map(|o| o.stdout.trim().to_string())
+        }
     };
 
-    let base_commit = match prev_event.hash.as_deref() {
-        Some(h) => h,
-        None => return Ok(Some(prev_event.clone())),
+    let Some(base_commit) = base_commit_owned.as_deref() else {
+        return Ok(previous_event.cloned());
     };
 
     // Enumerate commits in the range (newest first)
@@ -189,11 +196,11 @@ fn create_intermediate_events(
         .collect();
 
     if intermediate_hashes.is_empty() {
-        return Ok(Some(prev_event.clone()));
+        return Ok(previous_event.cloned());
     }
 
     // Create intermediate events in chronological order, propagating xrefs through each
-    let mut current_prev_event = prev_event.clone();
+    let mut current_prev_event: Option<crate::models::event::Event> = previous_event.cloned();
 
     for hash in intermediate_hashes {
         let summary = run_git(project_path, &["log", "-1", "--format=%s", hash])
@@ -210,26 +217,28 @@ fn create_intermediate_events(
             ),
         )?;
 
-        let prev_commit = current_prev_event.hash.as_deref().unwrap_or(hash);
+        // Only propagate xrefs if there is a previous event to propagate from
+        if let Some(ref prev) = current_prev_event {
+            let prev_commit = prev.hash.as_deref().unwrap_or(hash);
+            propagate_previous_xrefs(
+                conn,
+                PropagateXrefsParams {
+                    project_id,
+                    new_event_id: &intermediate_event.id,
+                    prev_event_id: &prev.id,
+                    prev_commit,
+                    resolved_issues,
+                    project_path,
+                    commit: hash,
+                    branch_context_id,
+                },
+            )?;
+        }
 
-        propagate_previous_xrefs(
-            conn,
-            PropagateXrefsParams {
-                project_id,
-                new_event_id: &intermediate_event.id,
-                prev_event_id: &current_prev_event.id,
-                prev_commit,
-                resolved_issues,
-                project_path,
-                commit: hash,
-                branch_context_id,
-            },
-        )?;
-
-        current_prev_event = intermediate_event;
+        current_prev_event = Some(intermediate_event);
     }
 
-    Ok(Some(current_prev_event))
+    Ok(current_prev_event)
 }
 
 fn build_event_summary(

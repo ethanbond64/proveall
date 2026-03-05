@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import ReviewPopup from '../components/ReviewPopup';
 import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
 import { isApproved } from '../../../utils/reviewUtils';
 
 // Component to render individual file with its own progress state
-function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
+function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup, onHoverLeaveButton }) {
   const context = useReviewContext();
 
   // Get progress info from context's computed values
@@ -27,13 +27,15 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
     }
   };
 
-  const handleReviewToggle = (e) => {
+  const handleReviewHover = (e) => {
     e.stopPropagation();
-    e.preventDefault();
-
     if (context.mode !== COMMIT_REVIEW_MODE) return;
-
     onShowPopup(e, file.path, fileProgress.defaultState);
+  };
+
+  const handleReviewHoverLeave = (e) => {
+    e.stopPropagation();
+    if (onHoverLeaveButton) onHoverLeaveButton();
   };
 
   const fileName = file.name || file.path.split('/').pop();
@@ -69,10 +71,11 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup }) {
                 type="button"
                 className={`file-review-dot ${fileProgress.defaultState || ''}`}
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={handleReviewToggle}
+                onMouseEnter={handleReviewHover}
+                onMouseLeave={handleReviewHoverLeave}
                 title={fileProgress.defaultState
-                  ? `File default: ${fileProgress.defaultState}. Click to change.`
-                  : 'Click to set file default review'}
+                  ? `File default: ${fileProgress.defaultState}. Hover to change.`
+                  : 'Hover to set file default review'}
                 style={{
                   opacity: fileProgress.defaultState ? 1 : 0.3,
                 }}
@@ -113,6 +116,8 @@ function FileTree({
   const context = useReviewContext();
   const [filePopupState, setFilePopupState] = useState(null);
   const [expandedSections, setExpandedSections] = useState({ issues: true, approved: true });
+  const hoverTimeoutRef = useRef(null);
+  const popupExpandedRef = useRef(false);
 
   // Extract touched files from context
   const touchedFiles = Array.from(context.touchedFiles.values());
@@ -135,7 +140,25 @@ function FileTree({
     approvedFiles.sort((a, b) => (a.name || a.path).localeCompare(b.name || b.path));
   }
 
+  const cancelHoverTimeout = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    // Don't auto-close if the popup has been expanded (yellow/red clicked)
+    if (popupExpandedRef.current) return;
+    cancelHoverTimeout();
+    hoverTimeoutRef.current = setTimeout(() => {
+      setFilePopupState(null);
+    }, 150);
+  }, [cancelHoverTimeout]);
+
   const handleShowPopup = (e, path, currentState) => {
+    cancelHoverTimeout();
+    popupExpandedRef.current = false;
     setFilePopupState({
       position: {
         x: e.clientX,
@@ -145,6 +168,24 @@ function FileTree({
       currentState
     });
   };
+
+  const handlePopupMouseEnter = useCallback(() => {
+    cancelHoverTimeout();
+  }, [cancelHoverTimeout]);
+
+  const handlePopupMouseLeave = useCallback(() => {
+    scheduleClose();
+  }, [scheduleClose]);
+
+  const handlePopupExpanded = useCallback(() => {
+    popupExpandedRef.current = true;
+  }, []);
+
+  const handleClosePopup = useCallback(() => {
+    cancelHoverTimeout();
+    popupExpandedRef.current = false;
+    setFilePopupState(null);
+  }, [cancelHoverTimeout]);
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -185,6 +226,7 @@ function FileTree({
                         isSelected={selectedPath === file.path}
                         onSelectFile={onSelectFile}
                         onShowPopup={handleShowPopup}
+                        onHoverLeaveButton={scheduleClose}
                       />
                     ))}
                   </div>
@@ -212,6 +254,7 @@ function FileTree({
                         isSelected={selectedPath === file.path}
                         onSelectFile={onSelectFile}
                         onShowPopup={handleShowPopup}
+                        onHoverLeaveButton={scheduleClose}
                       />
                     ))}
                   </div>
@@ -229,6 +272,7 @@ function FileTree({
                 isSelected={selectedPath === file.path}
                 onSelectFile={onSelectFile}
                 onShowPopup={handleShowPopup}
+                onHoverLeaveButton={scheduleClose}
               />
             ))}
           </>
@@ -242,7 +286,10 @@ function FileTree({
           position={filePopupState.position}
           path={filePopupState.path}
           currentState={filePopupState.currentState}
-          onClose={() => setFilePopupState(null)}
+          onClose={handleClosePopup}
+          onMouseEnter={handlePopupMouseEnter}
+          onMouseLeave={handlePopupMouseLeave}
+          onExpanded={handlePopupExpanded}
         />
       )}
     </>

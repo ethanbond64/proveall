@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-03-05
+
+### Changed
+- Improved UI usability for line reviews: single click on a diff chunk will select the full chunk for review.
+- Minor UI improvements in the project page and review page.
+
+### Fixed
+- Bug where bulk commit reviews did not save properly if it was the first review on the branch.
+
 ## [0.4.0] - 2026-03-04
 
 ### Added

@@ -35,11 +35,47 @@ export function useLineReviewDecorations(
     changeBlocksRef.current = changeBlocks;
   }, [changeBlocks]);
 
+  // Helper to apply blue outline highlights to a range of glyph dots
+  const applyBlueHighlight = (currentEditor, startLine, endLine) => {
+    const decorations = [];
+    for (let line = startLine; line <= endLine; line++) {
+      decorations.push({
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+          isWholeLine: false,
+          glyphMarginClassName: 'line-review-dot-selected',
+        }
+      });
+    }
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        decorations
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
+  const clearBlueHighlight = (currentEditor) => {
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        []
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
   // Update decorations when lineReviews or changeBlocks change
   useEffect(() => {
     // Use the stable editor reference
     const currentEditor = editorRef.current;
     if (!currentEditor) return;
+
+    // Clear blue selection highlight when reviews update (color was applied)
+    clearBlueHighlight(currentEditor);
 
     // Wait for the editor model to be ready
     const model = currentEditor.getModel();
@@ -169,39 +205,6 @@ export function useLineReviewDecorations(
     };
   }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
 
-  // Helper to apply blue outline highlights to a range of glyph dots
-  const applyBlueHighlight = (currentEditor, startLine, endLine) => {
-    const decorations = [];
-    for (let line = startLine; line <= endLine; line++) {
-      decorations.push({
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: false,
-          glyphMarginClassName: 'line-review-dot-selected',
-        }
-      });
-    }
-    try {
-      selectionHighlightRef.current = currentEditor.deltaDecorations(
-        selectionHighlightRef.current || [],
-        decorations
-      );
-    } catch (e) {
-      selectionHighlightRef.current = [];
-    }
-  };
-
-  const clearBlueHighlight = (currentEditor) => {
-    try {
-      selectionHighlightRef.current = currentEditor.deltaDecorations(
-        selectionHighlightRef.current || [],
-        []
-      );
-    } catch (e) {
-      selectionHighlightRef.current = [];
-    }
-  };
-
   // Highlight glyph dots with blue outline when lines are selected in the editor
   useEffect(() => {
     const currentEditor = editorRef.current;
@@ -259,44 +262,12 @@ export function useLineReviewDecorations(
     }
 
     const disposables = [];
-    let lastClickTime = 0;
-    let lastClickLine = null;
-    const DOUBLE_CLICK_MS = 400;
 
     disposables.push(currentEditor.onMouseDown(e => {
       if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
       const lineNumber = e.target.position?.lineNumber;
       if (!lineNumber) return;
 
-      const now = Date.now();
-      const isDoubleClick = (now - lastClickTime < DOUBLE_CLICK_MS) && (lastClickLine === lineNumber);
-      lastClickTime = now;
-      lastClickLine = lineNumber;
-
-      // Double-click on a diff line: highlight the entire hunk and open popup
-      if (isDoubleClick) {
-        const blocks = changeBlocksRef.current || [];
-        const block = blocks.find(b => lineNumber >= b.startLine && lineNumber <= b.endLine);
-        if (block) {
-          applyBlueHighlight(currentEditor, block.startLine, block.endLine);
-
-          const reviews = lineReviewsRef.current;
-          const existingReview = reviews?.lineRanges?.find(
-            r => r.start === block.startLine && r.end === block.endLine
-          ) || null;
-
-          setPopupState({
-            position: { x: e.event.posx, y: e.event.posy },
-            range: { start: block.startLine, end: block.endLine },
-            currentState: existingReview?.state || null,
-            issueRef: existingReview?.issueRef || null,
-            path
-          });
-        }
-        return;
-      }
-
-      // Single click: open popup for clicked line or current selection
       const selection = currentEditor.getSelection();
       let start = lineNumber;
       let end = lineNumber;
@@ -310,6 +281,15 @@ export function useLineReviewDecorations(
           // If selection ends at column 1 of a line, the user didn't actually
           // select content on that line — exclude it
           end = (selection.endColumn === 1 && selEnd > selStart) ? selEnd - 1 : selEnd;
+        }
+      } else {
+        // No selection: if the line is inside a hunk, use the full hunk range
+        const blocks = changeBlocksRef.current || [];
+        const block = blocks.find(b => lineNumber >= b.startLine && lineNumber <= b.endLine);
+        if (block) {
+          start = block.startLine;
+          end = block.endLine;
+          applyBlueHighlight(currentEditor, start, end);
         }
       }
 

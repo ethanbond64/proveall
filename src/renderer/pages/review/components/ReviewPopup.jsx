@@ -13,7 +13,7 @@ import {hasIssues, isApproved} from "../../../utils/reviewUtils";
  * @param {Object} props.range - Line range {start, end} - only for line mode
  * @param {Function} props.onClose - Callback when popup closes
  */
-function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
+function ReviewPopup({ mode, position, path, currentState, range, onClose, onMouseEnter, onMouseLeave, onExpanded }) {
   const context = useReviewContext();
   const popupRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -66,6 +66,7 @@ function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
   const handleNonGreenClick = (color) => {
     setSelectedColor(color);
     setIsExpanded(true);
+    if (onExpanded) onExpanded();
   };
 
   const handleSave = () => {
@@ -102,6 +103,8 @@ function ReviewPopup({ mode, position, path, currentState, range, onClose }) {
       ref={popupRef}
       className={`line-review-popup ${!isExpanded ? 'compact' : ''} ${isFileDefaultMode ? 'file-default-popup' : ''}`}
       style={{ left: position.x, top: position.y }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {/* Compact view - same for both modes */}
       {!isExpanded ? (
