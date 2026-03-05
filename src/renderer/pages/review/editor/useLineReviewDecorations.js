@@ -35,11 +35,47 @@ export function useLineReviewDecorations(
     changeBlocksRef.current = changeBlocks;
   }, [changeBlocks]);
 
+  // Helper to apply blue outline highlights to a range of glyph dots
+  const applyBlueHighlight = (currentEditor, startLine, endLine) => {
+    const decorations = [];
+    for (let line = startLine; line <= endLine; line++) {
+      decorations.push({
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+          isWholeLine: false,
+          glyphMarginClassName: 'line-review-dot-selected',
+        }
+      });
+    }
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        decorations
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
+  const clearBlueHighlight = (currentEditor) => {
+    try {
+      selectionHighlightRef.current = currentEditor.deltaDecorations(
+        selectionHighlightRef.current || [],
+        []
+      );
+    } catch (e) {
+      selectionHighlightRef.current = [];
+    }
+  };
+
   // Update decorations when lineReviews or changeBlocks change
   useEffect(() => {
     // Use the stable editor reference
     const currentEditor = editorRef.current;
     if (!currentEditor) return;
+
+    // Clear blue selection highlight when reviews update (color was applied)
+    clearBlueHighlight(currentEditor);
 
     // Wait for the editor model to be ready
     const model = currentEditor.getModel();
@@ -168,39 +204,6 @@ export function useLineReviewDecorations(
       clearTimeout(timeoutId);
     };
   }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
-
-  // Helper to apply blue outline highlights to a range of glyph dots
-  const applyBlueHighlight = (currentEditor, startLine, endLine) => {
-    const decorations = [];
-    for (let line = startLine; line <= endLine; line++) {
-      decorations.push({
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: false,
-          glyphMarginClassName: 'line-review-dot-selected',
-        }
-      });
-    }
-    try {
-      selectionHighlightRef.current = currentEditor.deltaDecorations(
-        selectionHighlightRef.current || [],
-        decorations
-      );
-    } catch (e) {
-      selectionHighlightRef.current = [];
-    }
-  };
-
-  const clearBlueHighlight = (currentEditor) => {
-    try {
-      selectionHighlightRef.current = currentEditor.deltaDecorations(
-        selectionHighlightRef.current || [],
-        []
-      );
-    } catch (e) {
-      selectionHighlightRef.current = [];
-    }
-  };
 
   // Highlight glyph dots with blue outline when lines are selected in the editor
   useEffect(() => {
