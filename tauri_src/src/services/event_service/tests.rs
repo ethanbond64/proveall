@@ -32,7 +32,7 @@ fn setup_git_repo() -> (TempDir, String) {
             .expect("git command failed")
     };
 
-    git(&["init"]);
+    git(&["init", "-b", "main"]);
     git(&["config", "user.email", "test@test.com"]);
     git(&["config", "user.name", "Test"]);
 
@@ -403,6 +403,97 @@ fn test_no_previous_event_no_intermediates() {
     // head_event_id should be set
     let bc = branch_context_repo::get(&mut conn, &bc_id).unwrap();
     assert_eq!(bc.head_event_id, Some(result.id));
+}
+
+#[test]
+fn test_first_review_on_branch_with_multiple_commits_creates_intermediates() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    // Create a feature branch off main
+    Command::new("git")
+        .args(["checkout", "-b", "feature"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    // Create 3 commits on the feature branch
+    let c1 = add_commit(&dir, "file.txt", "line1\nline2\n", "feature commit 1");
+    let c2 = add_commit(
+        &dir,
+        "file.txt",
+        "line1\nline2\nline3\n",
+        "feature commit 2",
+    );
+    let c3 = add_commit(
+        &dir,
+        "file.txt",
+        "line1\nline2\nline3\nline4\n",
+        "feature commit 3",
+    );
+
+    // Set up project and branch context with base_branch = main
+    let project = project_repo::create(
+        &mut conn,
+        NewProject::new(repo_path.to_string(), Some("test".to_string())),
+    )
+    .expect("Failed to create project");
+
+    let bc = branch_context_repo::create(
+        &mut conn,
+        NewBranchContext::new(
+            project.id.clone(),
+            "feature".to_string(),
+            "main".to_string(),
+            "{}".to_string(),
+        ),
+    )
+    .expect("Failed to create branch context");
+
+    // First review ever on this branch — target c3 directly (no previous event)
+    // This should create intermediate events for c1 and c2
+    let result = create_event(
+        &mut conn,
+        &project.id,
+        c3.clone(),
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc.id,
+    )
+    .expect("Failed to create first bulk event on branch");
+
+    // Should have 3 events: c1 (intermediate) + c2 (intermediate) + c3 (target)
+    let all_events = event_repo::list(&mut conn, |q| q).expect("Failed to list events");
+    assert_eq!(
+        all_events.len(),
+        3,
+        "Expected 3 events (2 intermediates + target)"
+    );
+
+    // Verify each commit has an event
+    let c1_events: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.hash.as_deref() == Some(&c1))
+        .collect();
+    assert_eq!(c1_events.len(), 1, "Expected exactly 1 event for c1");
+
+    let c2_events: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.hash.as_deref() == Some(&c2))
+        .collect();
+    assert_eq!(c2_events.len(), 1, "Expected exactly 1 event for c2");
+
+    let c3_events: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.hash.as_deref() == Some(&c3))
+        .collect();
+    assert_eq!(c3_events.len(), 1, "Expected exactly 1 event for c3");
+
+    // head_event_id should point to the target (c3) event
+    let bc_updated = branch_context_repo::get(&mut conn, &bc.id).unwrap();
+    assert_eq!(bc_updated.head_event_id, Some(result.id));
 }
 
 #[test]
