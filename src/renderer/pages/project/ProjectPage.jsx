@@ -194,15 +194,20 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
             ⚙
           </button>
         </div>
-        <div className="project-header-row">
+        <div className="project-header-row project-header-details">
+          <span className="project-header-label">Current project:</span>
           <span className="project-name">{project?.path?.split('/').pop() || 'Project'}</span>
           {branchData.branch && (
-            <span className="project-branch-info">
-              {branchData.branch}
+            <>
+              <span className="project-header-label">Current branch:</span>
+              <span className="project-branch-info">{branchData.branch}</span>
               {branchData.base_branch && branchData.branch !== branchData.base_branch && (
-                <> ← {branchData.base_branch}</>
+                <>
+                  <span className="project-header-label">Base branch:</span>
+                  <span className="project-branch-info">{branchData.base_branch}</span>
+                </>
               )}
-            </span>
+            </>
           )}
         </div>
       </div>
