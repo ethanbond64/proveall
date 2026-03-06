@@ -21,6 +21,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ethanbond64/proveall/releases/latest/download/latest.json"
+      ],
+      "pubkey": "PLACEHOLDER_UNTIL_KEY_IS_GENERATED"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
