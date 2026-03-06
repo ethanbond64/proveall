@@ -1,11 +1,11 @@
 use tauri::State;
 
-use crate::{DbState, LlmState};
+use crate::{DbState, SettingsState};
 
 #[tauri::command]
 pub async fn fix_issue(
     db_state: State<'_, DbState>,
-    llm_state: State<'_, LlmState>,
+    settings_state: State<'_, SettingsState>,
     project_id: String,
     issue_id: String,
     branch_context_id: String,
@@ -23,6 +23,6 @@ pub async fn fix_issue(
     };
 
     // Run LLM + commit without holding the DB lock
-    let config = llm_state.config.read().unwrap().clone();
+    let config = settings_state.settings.read().unwrap().to_llm_config();
     crate::services::llm_service::execute_fix(&ctx, &config).map_err(String::from)
 }
