@@ -6,7 +6,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 function TerminalPanel({ projectPath, prompt, onClose }) {
-  const panelRef = useRef(null);
   const termRef = useRef(null);
   const terminalInstance = useRef(null);
   const fitAddon = useRef(null);
@@ -15,7 +14,8 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   const unlistenExit = useRef(null);
   const promptInjected = useRef(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(400);
+  const [minimized, setMinimized] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(300);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
@@ -40,15 +40,16 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e) => {
+    if (minimized) return;
     e.preventDefault();
     isDragging.current = true;
     dragStartY.current = e.clientY;
-    dragStartHeight.current = panelRef.current.offsetHeight;
+    dragStartHeight.current = panelHeight;
 
-    const handleDragMove = (e) => {
+    const handleDragMove = (moveEvent) => {
       if (!isDragging.current) return;
-      const delta = dragStartY.current - e.clientY;
-      const newHeight = Math.max(150, Math.min(window.innerHeight - 50, dragStartHeight.current + delta));
+      const delta = dragStartY.current - moveEvent.clientY;
+      const newHeight = Math.max(100, Math.min(window.innerHeight - 80, dragStartHeight.current + delta));
       setPanelHeight(newHeight);
     };
 
@@ -60,7 +61,19 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
 
     document.addEventListener('mousemove', handleDragMove);
     document.addEventListener('mouseup', handleDragEnd);
-  }, []);
+  }, [minimized, panelHeight]);
+
+  // Re-fit terminal when minimized state changes
+  useEffect(() => {
+    if (!minimized && fitAddon.current) {
+      requestAnimationFrame(() => {
+        fitAddon.current.fit();
+        if (terminalInstance.current) {
+          terminalInstance.current.focus();
+        }
+      });
+    }
+  }, [minimized]);
 
   useEffect(() => {
     const term = new Terminal({
@@ -80,7 +93,6 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     term.loadAddon(fit);
     term.open(termRef.current);
 
-    // Delay initial fit to let the container layout settle
     requestAnimationFrame(() => {
       fit.fit();
       term.focus();
@@ -96,7 +108,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
       }
     });
 
-    // Debounced resize to avoid thrashing the PTY with rapid resize events
+    // Debounced resize
     let resizeTimer = null;
     const resizeObserver = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
@@ -114,9 +126,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
       }
     });
 
-    // Spawn the PTY session after fit so cols/rows are accurate
     const startSession = async () => {
-      // Wait a frame so fit() has applied
       await new Promise((r) => requestAnimationFrame(r));
 
       try {
@@ -129,12 +139,10 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
         sessionIdRef.current = sessionId;
         setIsRunning(true);
 
-        // Listen for PTY output (base64 encoded) — inject prompt once Claude is ready
         unlistenOutput.current = await listen(`pty-output-${sessionId}`, (event) => {
           const bytes = Uint8Array.from(atob(event.payload), c => c.charCodeAt(0));
           term.write(bytes);
 
-          // Once we see Claude's input prompt indicator, type the prompt text
           if (!promptInjected.current && prompt) {
             promptInjected.current = true;
             setTimeout(() => {
@@ -146,7 +154,6 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
           }
         });
 
-        // Listen for PTY exit
         unlistenExit.current = await listen(`pty-exit-${sessionId}`, () => {
           term.writeln('\r\n\x1b[90m--- Process exited ---\x1b[0m');
           setIsRunning(false);
@@ -173,20 +180,36 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   };
 
   return (
-    <div className="terminal-panel" ref={panelRef} style={{ height: panelHeight }}>
-      <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
+    <div
+      className={`terminal-drawer ${minimized ? 'terminal-drawer-minimized' : ''}`}
+      style={minimized ? undefined : { height: panelHeight }}
+    >
+      {!minimized && (
+        <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
+      )}
       <div className="terminal-panel-header">
-        <span className="terminal-panel-title">Claude Terminal</span>
+        <span className="terminal-panel-title">
+          Claude Terminal
+          {isRunning && <span className="terminal-running-indicator" />}
+        </span>
         <div className="terminal-panel-actions">
-          {isRunning && (
-            <span className="terminal-running-indicator">Running</span>
-          )}
-          <button className="terminal-close-btn" onClick={handleClose} title="Close terminal">
+          <button
+            className="terminal-header-btn"
+            onClick={() => setMinimized(!minimized)}
+            title={minimized ? 'Expand' : 'Minimize'}
+          >
+            {minimized ? '▴' : '▾'}
+          </button>
+          <button className="terminal-header-btn" onClick={handleClose} title="Close terminal">
             ×
           </button>
         </div>
       </div>
-      <div className="terminal-container" ref={termRef} />
+      <div
+        className="terminal-container"
+        ref={termRef}
+        style={minimized ? { display: 'none' } : undefined}
+      />
     </div>
   );
 }

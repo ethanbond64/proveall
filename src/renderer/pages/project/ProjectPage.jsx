@@ -2,9 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
-import TerminalPanel from '../../components/TerminalPanel';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings, onOpenTerminal, terminalActive }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
@@ -113,23 +112,15 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  const [terminalPrompt, setTerminalPrompt] = useState(null);
-
   const handleSendToClaude = async (e, issue) => {
     e.stopPropagation();
     try {
       const prompt = await window.backendAPI.buildIssuePrompt(project.id, issue.id, branchContextId);
-      setTerminalPrompt(prompt);
+      onOpenTerminal(project.path, prompt);
     } catch (error) {
       console.error('Failed to build prompt:', error);
       alert('Failed to build prompt: ' + error);
     }
-  };
-
-  const handleTerminalClose = async () => {
-    setTerminalPrompt(null);
-    // Refresh project state in case Claude made changes
-    await loadProjectState();
   };
 
   // Handle commit click - select for bulk review or toggle selection
@@ -365,7 +356,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                     <button
                       className="btn-primary btn-sm"
                       onClick={(e) => handleSendToClaude(e, issue)}
-                      disabled={!!terminalPrompt}
+                      disabled={terminalActive}
                       title="Send to Claude"
                     >
                       Send to Claude
@@ -379,14 +370,6 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
           </div>
         </div>
       </div>
-
-      {terminalPrompt && (
-        <TerminalPanel
-          projectPath={project.path}
-          prompt={terminalPrompt}
-          onClose={handleTerminalClose}
-        />
-      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
 import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
+import TerminalPanel from './components/TerminalPanel';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import './styles.css';
 
@@ -20,6 +21,17 @@ function App() {
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
   const [fixingIssueId, setFixingIssueId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Terminal state - lives here so it persists across navigation
+  const [terminal, setTerminal] = useState(null); // { projectPath, prompt }
+
+  const handleOpenTerminal = (projectPath, prompt) => {
+    setTerminal({ projectPath, prompt });
+  };
+
+  const handleCloseTerminal = () => {
+    setTerminal(null);
+  };
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -117,6 +129,8 @@ function App() {
           fixingIssueId={fixingIssueId}
           setFixingIssueId={setFixingIssueId}
           onShowSettings={() => setShowSettings(true)}
+          onOpenTerminal={handleOpenTerminal}
+          terminalActive={!!terminal}
         />
       ) : (
         <ReviewProjectPage
@@ -129,6 +143,15 @@ function App() {
           branchContextId={branchContextId}
           onNavigateBack={handleNavigateBack}
           onNavigateToIssue={handleNavigateToIssue}
+        />
+      )}
+
+      {/* Terminal drawer - persists across page navigation */}
+      {terminal && (
+        <TerminalPanel
+          projectPath={terminal.projectPath}
+          prompt={terminal.prompt}
+          onClose={handleCloseTerminal}
         />
       )}
 
