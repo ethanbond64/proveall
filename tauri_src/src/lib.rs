@@ -66,16 +66,26 @@ pub fn run() {
         .manage(DbState(Mutex::new(conn)))
         .manage(llm_state)
         .invoke_handler(tauri::generate_handler![
+
+            // Project menu APIs
             fetch_projects,
             open_project,
+
+            // Branch context APIs
+            create_branch_context,
+
+            // Project review APIs
             get_project_state,
             get_current_branch,
-            create_branch_context,
             create_event,
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
+
+            // Child process API
             fix_issue,
+
+            // Settings API
             get_llm_settings,
             update_llm_settings,
             reset_llm_settings,
