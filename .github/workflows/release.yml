@@ -159,6 +159,8 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/private_keys/AuthKey.p8
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
           projectPath: tauri_src
@@ -174,6 +176,7 @@ jobs:
           path: |
             tauri_src/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
             tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz
+            tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   create-release:
@@ -196,13 +199,29 @@ jobs:
           # Find and move macOS Apple Silicon artifacts with proper naming
           if [ -d "artifacts/macos-aarch64-apple-darwin" ]; then
             DMG=$(find artifacts/macos-aarch64-apple-darwin -name "*.dmg" -type f | head -1)
-            TAR=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz" -type f | head -1)
+            TAR=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz" -not -name "*.sig" -type f | head -1)
+            SIG=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz.sig" -type f | head -1)
 
-            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.dmg"
-            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.app.tar.gz"
+            VERSION="${{ needs.check-version.outputs.version }}"
+            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${VERSION}_aarch64.dmg"
+            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz"
+            [ -n "$SIG" ] && mv "$SIG" "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz.sig"
           fi
 
           ls -la release-assets/
+
+      - name: Generate latest.json
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+          CHANGELOG: ${{ needs.check-version.outputs.changelog }}
+        run: |
+          ./scripts/generate-latest-json.sh \
+            "$VERSION" \
+            "$CHANGELOG" \
+            "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz.sig" \
+            "release-assets/latest.json"
+
+          cat release-assets/latest.json
 
       - name: Create GitHub Release
         env:
