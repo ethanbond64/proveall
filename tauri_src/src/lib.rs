@@ -60,18 +60,16 @@ pub fn run() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
         .manage(settings_state)
         .invoke_handler(tauri::generate_handler![
-
             // Project menu APIs
             fetch_projects,
             open_project,
-
             // Branch context APIs
             create_branch_context,
-
             // Project review APIs
             get_project_state,
             get_current_branch,
@@ -79,10 +77,8 @@ pub fn run() {
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
-
             // Child process API
             fix_issue,
-
             // Settings API
             get_settings,
             set_settings,

@@ -54,8 +54,8 @@ pub fn load_settings(app_data_dir: &Path) -> AppSettings {
 
 pub fn save_settings(app_data_dir: &Path, settings: &AppSettings) -> Result<(), AppError> {
     let path = settings_path(app_data_dir);
-    let json =
-        serde_json::to_string_pretty(settings).map_err(|e| AppError::Io(std::io::Error::other(e)))?;
+    let json = serde_json::to_string_pretty(settings)
+        .map_err(|e| AppError::Io(std::io::Error::other(e)))?;
     std::fs::write(&path, json)?;
     Ok(())
 }

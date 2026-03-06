@@ -10,10 +10,7 @@ pub fn get_settings(state: State<'_, SettingsState>) -> Result<AppSettings, Stri
 }
 
 #[tauri::command]
-pub fn set_settings(
-    state: State<'_, SettingsState>,
-    settings: AppSettings,
-) -> Result<(), String> {
+pub fn set_settings(state: State<'_, SettingsState>, settings: AppSettings) -> Result<(), String> {
     save_settings(&state.app_data_dir, &settings).map_err(String::from)?;
 
     let mut current = state.settings.write().unwrap();
