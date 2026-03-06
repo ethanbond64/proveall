@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MenuPage from './pages/menu/MenuPage';
 import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
@@ -24,25 +24,38 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
+  const lastUpdateCheck = useRef(0);
 
-  // Check for updates on mount
-  useEffect(() => {
-    checkForUpdate().then(async (result) => {
-      if (!result.available) return;
-      setUpdateInfo(result);
+  const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-      try {
-        const settings = await window.backendAPI.getSettings();
-        if (settings.auto_update) {
-          setUpdateInstalling(true);
-          await result.download();
-        }
-      } catch (e) {
-        console.error('Auto-update failed:', e);
-        setUpdateInstalling(false);
+  const runUpdateCheck = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastUpdateCheck.current < UPDATE_CHECK_INTERVAL_MS) return;
+    lastUpdateCheck.current = now;
+
+    const result = await checkForUpdate();
+    if (!result.available) return;
+
+    setUpdateInfo(result);
+    setUpdateDismissed(false);
+
+    try {
+      const settings = await window.backendAPI.getSettings();
+      if (settings.auto_update) {
+        setUpdateInstalling(true);
+        await result.download();
       }
-    });
+    } catch (e) {
+      console.error('Auto-update failed:', e);
+      setUpdateInstalling(false);
+    }
   }, []);
+
+  // Check on mount
+  useEffect(() => { runUpdateCheck(); }, [runUpdateCheck]);
+
+  // Re-check on page transitions (gated by interval)
+  useEffect(() => { runUpdateCheck(); }, [currentProject, showReviewPage, showSettings, runUpdateCheck]);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
