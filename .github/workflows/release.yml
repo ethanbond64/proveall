@@ -76,7 +76,7 @@ jobs:
         include:
           - args: '--target aarch64-apple-darwin'
             rust_target: 'aarch64-apple-darwin'
-            arch: 'silicon'
+            updater_platform: 'darwin-aarch64'
 
     runs-on: macos-latest
     steps:
@@ -172,7 +172,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.rust_target }}
+          name: build-${{ matrix.updater_platform }}
           path: |
             tauri_src/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
             tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz
@@ -195,18 +195,24 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir release-assets
+          VERSION="${{ needs.check-version.outputs.version }}"
 
-          # Find and move macOS Apple Silicon artifacts with proper naming
-          if [ -d "artifacts/macos-aarch64-apple-darwin" ]; then
-            DMG=$(find artifacts/macos-aarch64-apple-darwin -name "*.dmg" -type f | head -1)
-            TAR=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz" -not -name "*.sig" -type f | head -1)
-            SIG=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz.sig" -type f | head -1)
+          # Iterate over all build artifacts (one per updater platform)
+          for ARTIFACT_DIR in artifacts/build-*; do
+            [ -d "$ARTIFACT_DIR" ] || continue
 
-            VERSION="${{ needs.check-version.outputs.version }}"
-            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${VERSION}_aarch64.dmg"
-            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz"
-            [ -n "$SIG" ] && mv "$SIG" "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz.sig"
-          fi
+            # Extract updater platform from directory name (e.g. "build-darwin-aarch64" -> "darwin-aarch64")
+            UPDATER_PLATFORM="${ARTIFACT_DIR#artifacts/build-}"
+            ARCH="${UPDATER_PLATFORM#*-}"
+
+            DMG=$(find "$ARTIFACT_DIR" -name "*.dmg" -type f | head -1)
+            TAR=$(find "$ARTIFACT_DIR" -name "*.app.tar.gz" -not -name "*.sig" -type f | head -1)
+            SIG=$(find "$ARTIFACT_DIR" -name "*.app.tar.gz.sig" -type f | head -1)
+
+            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${VERSION}_${ARCH}.dmg"
+            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${VERSION}_${ARCH}.app.tar.gz"
+            [ -n "$SIG" ] && mv "$SIG" "release-assets/ProveAll_${VERSION}_${ARCH}.app.tar.gz.sig"
+          done
 
           ls -la release-assets/
 
@@ -215,11 +221,28 @@ jobs:
           VERSION: ${{ needs.check-version.outputs.version }}
           CHANGELOG: ${{ needs.check-version.outputs.changelog }}
         run: |
+          # Build platform args from discovered sig files
+          PLATFORM_ARGS=()
+          for SIG_FILE in release-assets/*.app.tar.gz.sig; do
+            [ -f "$SIG_FILE" ] || continue
+            # Derive updater platform from filename: ProveAll_0.5.0_aarch64.app.tar.gz.sig -> aarch64
+            BASENAME=$(basename "$SIG_FILE")
+            ARCH=$(echo "$BASENAME" | sed -E 's/ProveAll_[^_]+_(.+)\.app\.tar\.gz\.sig/\1/')
+            # Find matching artifact dir to get the full updater platform key
+            for ARTIFACT_DIR in artifacts/build-*; do
+              UPDATER_PLATFORM="${ARTIFACT_DIR#artifacts/build-}"
+              if [ "${UPDATER_PLATFORM#*-}" = "$ARCH" ]; then
+                PLATFORM_ARGS+=("$UPDATER_PLATFORM" "$SIG_FILE")
+                break
+              fi
+            done
+          done
+
           ./scripts/generate-latest-json.sh \
             "$VERSION" \
             "$CHANGELOG" \
-            "release-assets/ProveAll_${VERSION}_aarch64.app.tar.gz.sig" \
-            "release-assets/latest.json"
+            "release-assets/latest.json" \
+            "${PLATFORM_ARGS[@]}"
 
           cat release-assets/latest.json
 
