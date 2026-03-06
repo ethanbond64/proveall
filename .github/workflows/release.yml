@@ -64,8 +64,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  build-tauri:
-    name: Build Tauri App for macOS
+  build-and-release:
+    name: Build and Release
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
     timeout-minutes: 20
@@ -76,7 +76,6 @@ jobs:
         include:
           - args: '--target aarch64-apple-darwin'
             rust_target: 'aarch64-apple-darwin'
-            updater_platform: 'darwin-aarch64'
 
     runs-on: macos-latest
     steps:
@@ -164,96 +163,10 @@ jobs:
         with:
           args: ${{ matrix.args }}
           projectPath: tauri_src
+          tagName: v${{ needs.check-version.outputs.version }}
+          releaseName: v${{ needs.check-version.outputs.version }}
+          releaseBody: ${{ needs.check-version.outputs.changelog }}
 
       - name: Clean up Apple API key
         if: always()
         run: rm -rf "${{ runner.temp }}/private_keys"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.updater_platform }}
-          path: |
-            tauri_src/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
-            tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz
-            tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz.sig
-          if-no-files-found: error
-
-  create-release:
-    name: Create GitHub Release
-    needs: [check-version, build-tauri]
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir release-assets
-          VERSION="${{ needs.check-version.outputs.version }}"
-
-          # Iterate over all build artifacts (one per updater platform)
-          for ARTIFACT_DIR in artifacts/build-*; do
-            [ -d "$ARTIFACT_DIR" ] || continue
-
-            # Extract updater platform from directory name (e.g. "build-darwin-aarch64" -> "darwin-aarch64")
-            UPDATER_PLATFORM="${ARTIFACT_DIR#artifacts/build-}"
-            ARCH="${UPDATER_PLATFORM#*-}"
-
-            DMG=$(find "$ARTIFACT_DIR" -name "*.dmg" -type f | head -1)
-            TAR=$(find "$ARTIFACT_DIR" -name "*.app.tar.gz" -not -name "*.sig" -type f | head -1)
-            SIG=$(find "$ARTIFACT_DIR" -name "*.app.tar.gz.sig" -type f | head -1)
-
-            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${VERSION}_${ARCH}.dmg"
-            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${VERSION}_${ARCH}.app.tar.gz"
-            [ -n "$SIG" ] && mv "$SIG" "release-assets/ProveAll_${VERSION}_${ARCH}.app.tar.gz.sig"
-          done
-
-          ls -la release-assets/
-
-      - name: Generate latest.json
-        env:
-          VERSION: ${{ needs.check-version.outputs.version }}
-          CHANGELOG: ${{ needs.check-version.outputs.changelog }}
-        run: |
-          # Build platform args from discovered sig files
-          PLATFORM_ARGS=()
-          for SIG_FILE in release-assets/*.app.tar.gz.sig; do
-            [ -f "$SIG_FILE" ] || continue
-            # Derive updater platform from filename: ProveAll_0.5.0_aarch64.app.tar.gz.sig -> aarch64
-            BASENAME=$(basename "$SIG_FILE")
-            ARCH=$(echo "$BASENAME" | sed -E 's/ProveAll_[^_]+_(.+)\.app\.tar\.gz\.sig/\1/')
-            # Find matching artifact dir to get the full updater platform key
-            for ARTIFACT_DIR in artifacts/build-*; do
-              UPDATER_PLATFORM="${ARTIFACT_DIR#artifacts/build-}"
-              if [ "${UPDATER_PLATFORM#*-}" = "$ARCH" ]; then
-                PLATFORM_ARGS+=("$UPDATER_PLATFORM" "$SIG_FILE")
-                break
-              fi
-            done
-          done
-
-          ./scripts/generate-latest-json.sh \
-            "$VERSION" \
-            "$CHANGELOG" \
-            "release-assets/latest.json" \
-            "${PLATFORM_ARGS[@]}"
-
-          cat release-assets/latest.json
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.check-version.outputs.version }}
-          CHANGELOG: ${{ needs.check-version.outputs.changelog }}
-        run: |
-          # Create release with all assets
-          gh release create "v$VERSION" \
-            --title "v$VERSION" \
-            --notes "$CHANGELOG" \
-            release-assets/*
