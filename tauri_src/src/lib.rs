@@ -8,10 +8,8 @@ use crate::commands::project_commands::{
     create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
 };
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
-use crate::commands::settings_commands::{
-    get_llm_settings, reset_llm_settings, update_llm_settings,
-};
-use crate::utils::llm::{load_settings, LlmConfig};
+use crate::commands::settings_commands::{get_settings, reset_settings, set_settings};
+use crate::utils::settings::{load_settings, AppSettings};
 use diesel::sqlite::SqliteConnection;
 
 mod commands;
@@ -24,8 +22,8 @@ mod utils;
 
 pub struct DbState(pub Mutex<SqliteConnection>);
 
-pub struct LlmState {
-    pub config: Arc<RwLock<LlmConfig>>,
+pub struct SettingsState {
+    pub settings: Arc<RwLock<AppSettings>>,
     pub app_data_dir: PathBuf,
 }
 
@@ -52,33 +50,39 @@ pub fn run() {
     // Establish connection and run migrations
     let conn = db::connection::establish_connection(db_path_str);
 
-    // Load LLM settings from disk (or use defaults)
-    let llm_config = load_settings(&app_data_dir);
-    let config_arc = Arc::new(RwLock::new(llm_config));
+    // Load settings from disk (or use defaults)
+    let app_settings = load_settings(&app_data_dir);
+    let settings_arc = Arc::new(RwLock::new(app_settings));
 
-    let llm_state = LlmState {
-        config: config_arc,
+    let settings_state = SettingsState {
+        settings: settings_arc,
         app_data_dir: app_data_dir.clone(),
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
-        .manage(llm_state)
+        .manage(settings_state)
         .invoke_handler(tauri::generate_handler![
+            // Project menu APIs
             fetch_projects,
             open_project,
+            // Branch context APIs
+            create_branch_context,
+            // Project review APIs
             get_project_state,
             get_current_branch,
-            create_branch_context,
             create_event,
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
+            // Child process API
             fix_issue,
-            get_llm_settings,
-            update_llm_settings,
-            reset_llm_settings,
+            // Settings API
+            get_settings,
+            set_settings,
+            reset_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

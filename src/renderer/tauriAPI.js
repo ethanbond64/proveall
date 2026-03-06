@@ -26,7 +26,7 @@ window.backendAPI = {
 
   openDirectory: () => open({ directory: true, multiple: false }),
 
-  getLlmSettings: () => invoke('get_llm_settings'),
-  updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
-  resetLlmSettings: () => invoke('reset_llm_settings'),
+  getSettings: () => invoke('get_settings'),
+  setSettings: (settings) => invoke('set_settings', { settings }),
+  resetSettings: () => invoke('reset_settings'),
 };
