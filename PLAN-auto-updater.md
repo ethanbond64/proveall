@@ -1,5 +1,7 @@
 # Plan: Tauri Auto-Updater for ProveAll
 
+**Prerequisite:** This plan assumes the settings API refactor (see `PLAN-settings-refactor.md`) is complete. The `AppSettings` struct already includes `auto_update: bool`, and the generic `get_settings`/`set_settings`/`reset_settings` API is in place.
+
 ## Overview
 
 Add auto-update functionality using `tauri-plugin-updater` so users are notified when a new version is available, with an optional setting to auto-install updates.
@@ -10,26 +12,25 @@ Add auto-update functionality using `tauri-plugin-updater` so users are notified
 - **Update logic**: JavaScript/frontend-driven via `@tauri-apps/plugin-updater` JS API
 - **Key generation**: Manual (not covered by this plan)
 
-## Current State
+## Current State (Post Settings Refactor)
 
 - **Version**: 0.4.1, tracked in 4 places (package.json, tauri.conf.json, Cargo.toml, CHANGELOG.md)
 - **Releases**: Automated via GitHub Actions on push to `main`. Builds macOS aarch64 `.dmg` and `.app.tar.gz`, creates a GitHub Release with version tag.
-- **Settings**: `settings.json` stores `LlmConfig { command, args }` — loaded/saved in `tauri_src/src/utils/llm.rs`. Settings commands in `settings_commands.rs`. UI in `SettingsPage.jsx`.
-- **Frontend**: React 18, state-based routing in `App.jsx`. All Tauri commands called via `window.backendAPI` in `tauriAPI.js`.
+- **Settings**: `AppSettings` struct with `llm_command`, `llm_args`, `auto_update` fields. Generic `get_settings`/`set_settings`/`reset_settings` API. Settings toggle for `auto_update` can be added purely in the frontend.
 - **GitHub repo**: `https://github.com/ethanbond64/proveall`
 
 ## Implementation Steps
 
 ### Step 1: Install plugin dependencies
 
-**Cargo** — add to `tauri_src/Cargo.toml` dependencies:
+**Cargo** — add to `tauri_src/Cargo.toml`:
 ```toml
 tauri-plugin-updater = "2"
 ```
 
-**npm** — add to `package.json`:
+**npm**:
 ```
-@tauri-apps/plugin-updater
+npm install @tauri-apps/plugin-updater
 ```
 
 ### Step 2: Register the updater plugin in Rust
@@ -60,21 +61,12 @@ Add the `plugins.updater` section:
 
 The `pubkey` value will be filled in manually after key generation.
 
-### Step 4: Extend settings to support `auto_update`
+### Step 4: Update Tauri capabilities
 
-The current settings model only handles LLM config. We need to add an `auto_update` boolean.
-
-**Option A — Separate settings file**: Add a new `app_settings.json` alongside `settings.json` with `{ "auto_update": false }`. New Rust struct `AppSettings`, new load/save functions, new Tauri commands (`get_app_settings`, `update_app_settings`), new `AppSettingsState`.
-
-**Option B — Extend existing settings file**: Add `auto_update` to the existing `LlmConfig` struct (rename it to `AppConfig` or similar). Backward-compatible via `#[serde(default)]`.
-
-Recommendation: **Option A** (separate file) keeps concerns clean — LLM config and app preferences are unrelated. The existing settings.json may already exist on user machines with only LLM fields.
-
-Files to create/modify:
-- Create `tauri_src/src/utils/app_settings.rs` — `AppSettings { auto_update: bool }` with load/save
-- Create `tauri_src/src/commands/app_settings_commands.rs` — `get_app_settings`, `update_auto_update`
-- Modify `tauri_src/src/lib.rs` — register new state and commands
-- Modify `tauri_src/src/commands/mod.rs` — add module
+Add updater permissions to `tauri_src/capabilities/default.json`:
+```json
+"permissions": ["dialog:default", "updater:default"]
+```
 
 ### Step 5: Add update check logic in the frontend
 
@@ -104,7 +96,7 @@ export async function checkForUpdate() {
 ### Step 6: Add update notification banner in `App.jsx`
 
 On mount, call `checkForUpdate()`. If an update is available:
-- Check `auto_update` setting via `window.backendAPI.getAppSettings()`
+- Read `auto_update` from settings via `window.backendAPI.getSettings()`
 - If `auto_update` is **off**: render a dismissible banner at the top of the app:
   `"Update available — v{version}. [Install Now] [Dismiss]"`
 - If `auto_update` is **on**: automatically call `download()`, show a progress/restart banner
@@ -115,7 +107,7 @@ const [updateInfo, setUpdateInfo] = useState(null);
 const [updateDismissed, setUpdateDismissed] = useState(false);
 ```
 
-Create a small `UpdateBanner` component (inline or separate file) that renders above the current page content.
+Create a small `UpdateBanner` component (inline or separate file) rendered above the current page content.
 
 ### Step 7: Add auto-update toggle to `SettingsPage.jsx`
 
@@ -124,26 +116,19 @@ Add a new "Updates" section below the existing "LLM Provider" section:
 <div className="settings-section">
   <h3 className="settings-section-title">Updates</h3>
   <label>
-    <input type="checkbox" checked={autoUpdate} onChange={...} />
+    <input type="checkbox" checked={autoUpdate} onChange={handleAutoUpdateToggle} />
     Automatically install updates
   </label>
 </div>
 ```
 
-Wire it to the new `getAppSettings` / `updateAutoUpdate` backend commands via `tauriAPI.js`.
+The toggle reads/writes `auto_update` via the existing `getSettings`/`setSettings` API — no new backend work needed.
 
-### Step 8: Add backend API wrappers in `tauriAPI.js`
-
-```js
-getAppSettings: () => invoke('get_app_settings'),
-updateAutoUpdate: (autoUpdate) => invoke('update_auto_update', { autoUpdate }),
-```
-
-### Step 9: Update CI workflow to generate `latest.json`
+### Step 8: Update CI workflow to generate `latest.json`
 
 Modify `.github/workflows/release.yml`:
 
-1. **Build step**: Add `TAURI_SIGNING_PRIVATE_KEY` env var (from GitHub secret) to the `tauri-apps/tauri-action` step so `.sig` files are generated.
+1. **Build step**: Add `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars (from GitHub secrets) to the `tauri-apps/tauri-action` step so `.sig` files are generated alongside `.app.tar.gz`.
 
 2. **Release step**: After building, read the `.sig` file content and generate `latest.json`:
 ```json
@@ -164,38 +149,24 @@ Modify `.github/workflows/release.yml`:
 
 4. Upload the `.sig` file as a release asset too.
 
-### Step 10: Update Tauri capabilities
-
-Add updater permissions to `tauri_src/capabilities/default.json` (or the relevant capability file):
-```json
-"permissions": [
-  "updater:default"
-]
-```
-
 ## File Change Summary
 
 | File | Action |
 |------|--------|
 | `tauri_src/Cargo.toml` | Add `tauri-plugin-updater` dependency |
 | `package.json` | Add `@tauri-apps/plugin-updater` dependency |
-| `tauri_src/src/lib.rs` | Register updater plugin, new state, new commands |
+| `tauri_src/src/lib.rs` | Register updater plugin |
 | `tauri_src/tauri.conf.json` | Add `plugins.updater` config |
-| `tauri_src/src/utils/app_settings.rs` | **New** — AppSettings struct, load/save |
-| `tauri_src/src/utils/mod.rs` | Add `app_settings` module |
-| `tauri_src/src/commands/app_settings_commands.rs` | **New** — get/update commands |
-| `tauri_src/src/commands/mod.rs` | Add `app_settings_commands` module |
-| `tauri_src/capabilities/default.json` | Add updater permissions |
+| `tauri_src/capabilities/default.json` | Add `updater:default` permission |
 | `src/renderer/utils/updater.js` | **New** — update check logic |
-| `src/renderer/tauriAPI.js` | Add `getAppSettings`, `updateAutoUpdate` |
 | `src/renderer/App.jsx` | Add update check on mount, render UpdateBanner |
-| `src/renderer/pages/SettingsPage.jsx` | Add auto-update toggle |
+| `src/renderer/pages/SettingsPage.jsx` | Add auto-update toggle (uses existing settings API) |
 | `src/renderer/styles.css` | Add banner styles |
-| `.github/workflows/release.yml` | Add signing key env, generate `latest.json`, upload assets |
+| `.github/workflows/release.yml` | Add signing key env, generate + upload `latest.json` and `.sig` |
 
 ## Manual Steps (Not Covered)
 
 1. Generate Tauri signing keypair: `npx tauri signer generate -w ~/.tauri/proveall.key`
-2. Add `TAURI_SIGNING_PRIVATE_KEY` to GitHub repo secrets
+2. Add `TAURI_SIGNING_PRIVATE_KEY` (and password if set) to GitHub repo secrets
 3. Replace `PLACEHOLDER_UNTIL_KEY_IS_GENERATED` in `tauri.conf.json` with the public key
 4. Test end-to-end with a real release
