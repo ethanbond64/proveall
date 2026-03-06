@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 function TerminalPanel({ projectPath, prompt, onClose }) {
+  const panelRef = useRef(null);
   const termRef = useRef(null);
   const terminalInstance = useRef(null);
   const fitAddon = useRef(null);
@@ -14,6 +15,10 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   const unlistenExit = useRef(null);
   const promptInjected = useRef(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(400);
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
 
   const cleanup = useCallback(async () => {
     if (unlistenOutput.current) {
@@ -31,6 +36,30 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
       sessionIdRef.current = null;
     }
     setIsRunning(false);
+  }, []);
+
+  // Drag-to-resize handlers
+  const handleDragStart = useCallback((e) => {
+    e.preventDefault();
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = panelRef.current.offsetHeight;
+
+    const handleDragMove = (e) => {
+      if (!isDragging.current) return;
+      const delta = dragStartY.current - e.clientY;
+      const newHeight = Math.max(150, Math.min(window.innerHeight - 50, dragStartHeight.current + delta));
+      setPanelHeight(newHeight);
+    };
+
+    const handleDragEnd = () => {
+      isDragging.current = false;
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
+    };
+
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
   }, []);
 
   useEffect(() => {
@@ -54,6 +83,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     // Delay initial fit to let the container layout settle
     requestAnimationFrame(() => {
       fit.fit();
+      term.focus();
     });
 
     terminalInstance.current = term;
@@ -143,7 +173,8 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   };
 
   return (
-    <div className="terminal-panel">
+    <div className="terminal-panel" ref={panelRef} style={{ height: panelHeight }}>
+      <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
       <div className="terminal-panel-header">
         <span className="terminal-panel-title">Claude Terminal</span>
         <div className="terminal-panel-actions">

@@ -2901,12 +2901,22 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 50vh;
   display: flex;
   flex-direction: column;
   background: #1e1e1e;
   border-top: 2px solid #007acc;
   z-index: 1000;
+}
+
+.terminal-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.terminal-resize-handle:hover {
+  background: #007acc;
 }
 
 .terminal-panel-header {
