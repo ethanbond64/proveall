@@ -48,8 +48,8 @@ pub fn gather_issue_context(
     })
 }
 
-/// Build the prompt, run the LLM, and commit. Does not need a DB connection.
-pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, AppError> {
+/// Build the prompt string from issue context.
+pub fn build_prompt(ctx: &IssueContext) -> String {
     let mut affected_files = String::new();
     for composite in &ctx.composites {
         affected_files.push_str(&format!("### {}\n", composite.relative_file_path));
@@ -65,15 +65,21 @@ pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, App
         affected_files.push('\n');
     }
 
-    let prompt = format!(
+    format!(
         "Fix the following code review issue.\n\n\
          ## Issue\n\
          {}\n\n\
          ## Affected files\n\
          {}\
-         Fix the issue by editing the affected files. Only make changes necessary to address the issue.",
+         Fix the issue by editing the affected files. Only make changes necessary to address the issue.\n\n\
+         After making the changes, stage and commit them with a commit message starting with \"fix: \".",
         ctx.issue_comment, affected_files
-    );
+    )
+}
+
+/// Build the prompt, run the LLM, and commit. Does not need a DB connection.
+pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, AppError> {
+    let prompt = build_prompt(ctx);
 
     let llm_output = call_llm(config, &ctx.project_path, &prompt)?;
 

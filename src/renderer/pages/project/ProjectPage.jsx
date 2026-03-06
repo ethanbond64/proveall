@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
+import TerminalPanel from '../../components/TerminalPanel';
 
 function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
@@ -112,19 +113,23 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  const handleFixWithLLM = async (e, issue) => {
+  const [terminalPrompt, setTerminalPrompt] = useState(null);
+
+  const handleSendToClaude = async (e, issue) => {
     e.stopPropagation();
-    if (fixingIssueId) return;
-    setFixingIssueId(issue.id);
     try {
-      await window.backendAPI.fixIssue(project.id, issue.id, branchContextId);
-      await loadProjectState();
+      const prompt = await window.backendAPI.buildIssuePrompt(project.id, issue.id, branchContextId);
+      setTerminalPrompt(prompt);
     } catch (error) {
-      console.error('Failed to fix issue:', error);
-      alert('Failed to fix issue: ' + error);
-    } finally {
-      setFixingIssueId(null);
+      console.error('Failed to build prompt:', error);
+      alert('Failed to build prompt: ' + error);
     }
+  };
+
+  const handleTerminalClose = async () => {
+    setTerminalPrompt(null);
+    // Refresh project state in case Claude made changes
+    await loadProjectState();
   };
 
   // Handle commit click - select for bulk review or toggle selection
@@ -359,11 +364,11 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                     </div>
                     <button
                       className="btn-primary btn-sm"
-                      onClick={(e) => handleFixWithLLM(e, issue)}
-                      disabled={fixingIssueId === issue.id}
-                      title={fixingIssueId === issue.id ? "Fixing this issue..." : "Send to LLM"}
+                      onClick={(e) => handleSendToClaude(e, issue)}
+                      disabled={!!terminalPrompt}
+                      title="Send to Claude"
                     >
-                      {fixingIssueId === issue.id ? 'Fixing...' : 'Send to LLM'}
+                      Send to Claude
                     </button>
                   </div>
                 ))
@@ -374,6 +379,14 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
           </div>
         </div>
       </div>
+
+      {terminalPrompt && (
+        <TerminalPanel
+          projectPath={project.path}
+          prompt={terminalPrompt}
+          onClose={handleTerminalClose}
+        />
+      )}
     </div>
   );
 }

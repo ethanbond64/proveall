@@ -20,6 +20,7 @@ window.backendAPI = {
     invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId }),
 
   fixIssue: (projectId, issueId, branchContextId) => invoke('fix_issue', { projectId, issueId, branchContextId }),
+  buildIssuePrompt: (projectId, issueId, branchContextId) => invoke('build_issue_prompt', { projectId, issueId, branchContextId }),
 
   getDirectory: (projectId, directoryPath) => invoke('get_directory', { projectId, directoryPath }),
   readDirectory: (path) => invoke('get_directory', { projectId: 1, directoryPath: path }), // TODO Fallback with dummy projectId
@@ -29,4 +30,9 @@ window.backendAPI = {
   getLlmSettings: () => invoke('get_llm_settings'),
   updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
   resetLlmSettings: () => invoke('reset_llm_settings'),
+
+  ptySpawn: (projectPath, cols, rows) => invoke('pty_spawn', { projectPath, cols, rows }),
+  ptyWrite: (sessionId, data) => invoke('pty_write', { sessionId, data }),
+  ptyResize: (sessionId, cols, rows) => invoke('pty_resize', { sessionId, cols, rows }),
+  ptyKill: (sessionId) => invoke('pty_kill', { sessionId }),
 };

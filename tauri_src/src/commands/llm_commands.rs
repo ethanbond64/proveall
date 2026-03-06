@@ -26,3 +26,22 @@ pub async fn fix_issue(
     let config = llm_state.config.read().unwrap().clone();
     crate::services::llm_service::execute_fix(&ctx, &config).map_err(String::from)
 }
+
+#[tauri::command]
+pub fn build_issue_prompt(
+    db_state: State<'_, DbState>,
+    project_id: String,
+    issue_id: String,
+    branch_context_id: String,
+) -> Result<String, String> {
+    let mut conn = db_state.0.lock().unwrap();
+    let ctx = crate::services::llm_service::gather_issue_context(
+        &mut conn,
+        &project_id,
+        &issue_id,
+        &branch_context_id,
+    )
+    .map_err(String::from)?;
+
+    Ok(crate::services::llm_service::build_prompt(&ctx))
+}

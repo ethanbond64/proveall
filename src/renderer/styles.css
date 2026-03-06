@@ -2894,3 +2894,84 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Terminal Panel */
+.terminal-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-top: 2px solid #007acc;
+  z-index: 1000;
+}
+
+.terminal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.terminal-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.terminal-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-running-indicator {
+  font-size: 11px;
+  color: #4ec9b0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.terminal-running-indicator::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ec9b0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.terminal-close-btn {
+  background: none;
+  border: none;
+  color: #cccccc;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.terminal-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.terminal-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+}
