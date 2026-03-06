@@ -41,6 +41,7 @@
     ],
     "macOS": {
       "signingIdentity": "Developer ID Application: Ethan Bond (GYPQ65867V)"
-    }
+    },
+    "createUpdaterArtifacts": true
   }
 }
