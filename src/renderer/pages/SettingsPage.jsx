@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../styles.css';
 
 function SettingsPage({ onBack }) {
-  const [command, setCommand] = useState('');
-  const [args, setArgs] = useState('');
+  const [llmCommand, setLlmCommand] = useState('');
+  const [llmArgs, setLlmArgs] = useState('');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
+  const settingsRef = useRef(null);
 
   useEffect(() => {
-    window.backendAPI.getLlmSettings().then((settings) => {
-      setCommand(settings.command);
-      setArgs(settings.args);
+    window.backendAPI.getSettings().then((settings) => {
+      settingsRef.current = settings;
+      setLlmCommand(settings.llm_command);
+      setLlmArgs(settings.llm_args);
     }).catch((err) => {
       console.error('Failed to load settings:', err);
       setStatus('Failed to load settings');
@@ -21,7 +23,9 @@ function SettingsPage({ onBack }) {
     setSaving(true);
     setStatus(null);
     try {
-      await window.backendAPI.updateLlmSettings(command, args);
+      const updated = { ...settingsRef.current, llm_command: llmCommand, llm_args: llmArgs };
+      await window.backendAPI.setSettings(updated);
+      settingsRef.current = updated;
       setStatus('Settings saved');
     } catch (err) {
       console.error('Failed to save settings:', err);
@@ -34,9 +38,10 @@ function SettingsPage({ onBack }) {
   const handleRestoreDefaults = async () => {
     setStatus(null);
     try {
-      const defaults = await window.backendAPI.resetLlmSettings();
-      setCommand(defaults.command);
-      setArgs(defaults.args);
+      const defaults = await window.backendAPI.resetSettings();
+      settingsRef.current = defaults;
+      setLlmCommand(defaults.llm_command);
+      setLlmArgs(defaults.llm_args);
       setStatus('Defaults restored');
     } catch (err) {
       console.error('Failed to restore defaults:', err);
@@ -58,8 +63,8 @@ function SettingsPage({ onBack }) {
           <label>Command</label>
           <input
             type="text"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
+            value={llmCommand}
+            onChange={(e) => setLlmCommand(e.target.value)}
             placeholder="claude"
           />
         </div>
@@ -68,8 +73,8 @@ function SettingsPage({ onBack }) {
           <label>Arguments</label>
           <input
             type="text"
-            value={args}
-            onChange={(e) => setArgs(e.target.value)}
+            value={llmArgs}
+            onChange={(e) => setLlmArgs(e.target.value)}
             placeholder="--print --dangerously-skip-permissions ..."
           />
         </div>
