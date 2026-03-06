@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MenuPage from './pages/menu/MenuPage';
 import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
 import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
+import { checkForUpdate } from './utils/updater';
 import './styles.css';
 
 function App() {
@@ -20,6 +21,28 @@ function App() {
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
   const [fixingIssueId, setFixingIssueId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+
+  // Check for updates on mount
+  useEffect(() => {
+    checkForUpdate().then(async (result) => {
+      if (!result.available) return;
+      setUpdateInfo(result);
+
+      try {
+        const settings = await window.backendAPI.getSettings();
+        if (settings.auto_update) {
+          setUpdateInstalling(true);
+          await result.download();
+        }
+      } catch (e) {
+        console.error('Auto-update failed:', e);
+        setUpdateInstalling(false);
+      }
+    });
+  }, []);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -97,8 +120,34 @@ function App() {
     setReviewContext(null);
   };
 
+  const handleInstallUpdate = async () => {
+    if (!updateInfo) return;
+    setUpdateInstalling(true);
+    try {
+      await updateInfo.download();
+    } catch (e) {
+      console.error('Update install failed:', e);
+      setUpdateInstalling(false);
+    }
+  };
+
   return (
     <div className="app">
+
+      {/* Update Banner */}
+      {updateInfo?.available && !updateDismissed && (
+        <div className="update-banner">
+          {updateInstalling ? (
+            <span>Installing update v{updateInfo.version}...</span>
+          ) : (
+            <>
+              <span>Update available — v{updateInfo.version}.</span>
+              <button className="update-banner-btn" onClick={handleInstallUpdate}>Install Now</button>
+              <button className="update-banner-btn dismiss" onClick={() => setUpdateDismissed(true)}>Dismiss</button>
+            </>
+          )}
+        </div>
+      )}
 
       {showSettings ? (
         <SettingsPage onBack={() => setShowSettings(false)} />

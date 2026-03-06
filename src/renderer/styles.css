@@ -1216,6 +1216,56 @@ body {
   color: #4ec9b0;
 }
 
+/* Update Banner */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background-color: #2a4a3a;
+  border: 1px solid #4ec9b0;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.update-banner-btn {
+  background: none;
+  border: 1px solid #4ec9b0;
+  color: #4ec9b0;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.update-banner-btn:hover {
+  background-color: rgba(78, 201, 176, 0.15);
+}
+
+.update-banner-btn.dismiss {
+  border-color: #666;
+  color: #999;
+}
+
+.update-banner-btn.dismiss:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #cccccc;
+  cursor: pointer;
+}
+
+.settings-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
 .gear-btn {
   background: none;
   border: none;

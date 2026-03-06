@@ -4,6 +4,7 @@ import '../styles.css';
 function SettingsPage({ onBack }) {
   const [llmCommand, setLlmCommand] = useState('');
   const [llmArgs, setLlmArgs] = useState('');
+  const [autoUpdate, setAutoUpdate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
   const settingsRef = useRef(null);
@@ -13,6 +14,7 @@ function SettingsPage({ onBack }) {
       settingsRef.current = settings;
       setLlmCommand(settings.llm_command);
       setLlmArgs(settings.llm_args);
+      setAutoUpdate(settings.auto_update);
     }).catch((err) => {
       console.error('Failed to load settings:', err);
       setStatus('Failed to load settings');
@@ -23,7 +25,7 @@ function SettingsPage({ onBack }) {
     setSaving(true);
     setStatus(null);
     try {
-      const updated = { ...settingsRef.current, llm_command: llmCommand, llm_args: llmArgs };
+      const updated = { ...settingsRef.current, llm_command: llmCommand, llm_args: llmArgs, auto_update: autoUpdate };
       await window.backendAPI.setSettings(updated);
       settingsRef.current = updated;
       setStatus('Settings saved');
@@ -42,6 +44,7 @@ function SettingsPage({ onBack }) {
       settingsRef.current = defaults;
       setLlmCommand(defaults.llm_command);
       setLlmArgs(defaults.llm_args);
+      setAutoUpdate(defaults.auto_update);
       setStatus('Defaults restored');
     } catch (err) {
       console.error('Failed to restore defaults:', err);
@@ -96,6 +99,18 @@ function SettingsPage({ onBack }) {
         </div>
 
         {status && <p className="settings-status">{status}</p>}
+      </div>
+
+      <div className="settings-section" style={{ marginTop: 16 }}>
+        <h3 className="settings-section-title">Updates</h3>
+        <label className="settings-checkbox-label">
+          <input
+            type="checkbox"
+            checked={autoUpdate}
+            onChange={(e) => setAutoUpdate(e.target.checked)}
+          />
+          Automatically install updates
+        </label>
       </div>
     </div>
   );
