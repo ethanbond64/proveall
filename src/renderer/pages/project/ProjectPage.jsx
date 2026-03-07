@@ -66,18 +66,6 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   // Whether bulk mode is active (more than 1 commit selected)
   const isBulkSelection = bulkCount > 1;
 
-  // Find the base commit for bulk review: the last reviewed commit's hash
-  // (the commit just below oldestUnreviewedCommit in the list)
-  const baseCommitForBulk = useMemo(() => {
-    if (!isBulkSelection || oldestUnreviewedIndex < 0) return null;
-    // Look for the first reviewed commit below the oldest unreviewed
-    for (let i = oldestUnreviewedIndex + 1; i < commits.length; i++) {
-      if (commits[i].id !== null && commits[i].event_type === 'commit') {
-        return commits[i].commit;
-      }
-    }
-    return null; // No reviewed commit found (first review ever)
-  }, [commits, isBulkSelection, oldestUnreviewedIndex]);
 
   console.log({oldestUnreviewedCommit, commits})
 
@@ -165,7 +153,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     if (!oldestUnreviewedCommit) return;
 
     if (isBulkSelection) {
-      onNavigateToReview(selectedTargetCommit, COMMIT_REVIEW_MODE, null, baseCommitForBulk);
+      onNavigateToReview(selectedTargetCommit, COMMIT_REVIEW_MODE);
     } else {
       // Single commit review (either oldest selected or no selection)
       const commitToReview = selectedTargetCommit || oldestUnreviewedCommit.commit;
