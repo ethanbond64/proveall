@@ -85,6 +85,7 @@ fn create_event_inner(
             &resolved_issues,
             path,
             branch_context_id,
+            &branch_context.base_branch,
         )?
     } else {
         previous_event
@@ -128,6 +129,7 @@ fn create_event_inner(
                 project_path: path,
                 commit: &commit,
                 branch_context_id,
+                skip_file_translation: false,
             },
         )?;
     }
@@ -162,6 +164,7 @@ fn create_intermediate_events(
     resolved_issues: &[String],
     project_path: &str,
     branch_context_id: &str,
+    base_branch: &str,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
     let branch_context = branch_context_repo::get(conn, branch_context_id)?;
 
@@ -209,6 +212,12 @@ fn create_intermediate_events(
         // Only propagate xrefs if there is a previous event to propagate from
         if let Some(ref prev) = current_prev_event {
             let prev_commit = prev.hash.as_deref().unwrap_or(&commit.hash);
+
+            // Base-branch merges skip file translation — their file changes are from
+            // the base branch, not feature work
+            let is_base_merge = commit.parents.len() > 1
+                && git::is_base_branch_merge(project_path, &commit.parents, base_branch);
+
             propagate_previous_xrefs(
                 conn,
                 PropagateXrefsParams {
@@ -220,6 +229,7 @@ fn create_intermediate_events(
                     project_path,
                     commit: &commit.hash,
                     branch_context_id,
+                    skip_file_translation: is_base_merge,
                 },
             )?;
         }
@@ -324,6 +334,7 @@ struct PropagateXrefsParams<'a> {
     project_path: &'a str,
     commit: &'a str,
     branch_context_id: &'a str,
+    skip_file_translation: bool,
 }
 
 fn propagate_previous_xrefs(
@@ -332,16 +343,18 @@ fn propagate_previous_xrefs(
 ) -> Result<(), AppError> {
     let resolved_set: HashSet<&str> = params.resolved_issues.iter().map(|s| s.as_str()).collect();
 
-    let touched_file_paths: HashSet<String> = if params.prev_commit == params.commit {
-        // Same commit (e.g. resolution events) — no file changes to translate
-        HashSet::new()
-    } else {
-        diff_changed_files(params.project_path, &[params.prev_commit, params.commit])
-            .unwrap_or_default()
-            .into_iter()
-            .map(|f| f.path)
-            .collect()
-    };
+    let touched_file_paths: HashSet<String> =
+        if params.skip_file_translation || params.prev_commit == params.commit {
+            // skip_file_translation: base-branch merge — reuse composites without line translation
+            // Same commit (e.g. resolution events) — no file changes to translate
+            HashSet::new()
+        } else {
+            diff_changed_files(params.project_path, &[params.prev_commit, params.commit])
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| f.path)
+                .collect()
+        };
 
     let prev_xrefs_with_composites = event_issue_composite_xref_repo::join_list_by_event(
         conn,
