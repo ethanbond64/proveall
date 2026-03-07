@@ -7,7 +7,7 @@ use crate::models::composite_file_review_state::{
 use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, issue_repo, project_repo,
 };
-use crate::utils::git::run_git;
+use crate::utils::git;
 use crate::utils::llm::{call_llm, LlmConfig};
 
 pub struct IssueContext {
@@ -77,14 +77,11 @@ pub fn execute_fix(ctx: &IssueContext, config: &LlmConfig) -> Result<String, App
 
     let llm_output = call_llm(config, &ctx.project_path, &prompt)?;
 
-    run_git(&ctx.project_path, &["add", "-A"])?;
+    git::add_all(&ctx.project_path)?;
     // Only commit if the LLM actually changed files
-    let status = run_git(&ctx.project_path, &["status", "--porcelain"])?;
-    if !status.stdout.trim().is_empty() {
-        run_git(
-            &ctx.project_path,
-            &["commit", "-m", &format!("fix: {}", ctx.issue_comment)],
-        )?;
+    let status = git::status_porcelain(&ctx.project_path)?;
+    if !status.trim().is_empty() {
+        git::commit(&ctx.project_path, &format!("fix: {}", ctx.issue_comment))?;
     }
 
     Ok(llm_output)

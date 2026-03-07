@@ -18,7 +18,7 @@ use crate::repositories::{
     branch_context_repo, composite_file_review_state_repo, event_issue_composite_xref_repo,
     event_repo, issue_repo, project_repo, review_repo,
 };
-use crate::utils::git::{diff_changed_files, run_git};
+use crate::utils::git::{self, diff_changed_files};
 
 pub fn create_event(
     conn: &mut SqliteConnection,
@@ -169,9 +169,7 @@ fn create_intermediate_events(
         Some(prev) => prev.hash.clone(),
         None => {
             // First review on this branch — use the HEAD of the base branch as the starting point
-            run_git(project_path, &["rev-parse", &branch_context.base_branch])
-                .ok()
-                .map(|o| o.stdout.trim().to_string())
+            git::rev_parse(project_path, &branch_context.base_branch).ok()
         }
     };
 
@@ -181,9 +179,7 @@ fn create_intermediate_events(
 
     // Enumerate commits in the range (newest first)
     let range = format!("{}..{}", base_commit, target_commit);
-    let log_output = run_git(project_path, &["log", "--format=%H", &range])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
+    let log_output = git::log_hashes(project_path, &range).unwrap_or_default();
 
     let all_hashes: Vec<&str> = log_output.lines().filter(|l| !l.is_empty()).collect();
 
@@ -203,9 +199,7 @@ fn create_intermediate_events(
     let mut current_prev_event: Option<crate::models::event::Event> = previous_event.cloned();
 
     for hash in intermediate_hashes {
-        let summary = run_git(project_path, &["log", "-1", "--format=%s", hash])
-            .map(|o| o.stdout.trim().to_string())
-            .unwrap_or_default();
+        let summary = git::log_subject(project_path, hash).unwrap_or_default();
 
         let intermediate_event = event_repo::create(
             conn,
@@ -256,9 +250,7 @@ fn build_event_summary(
             .collect();
         serde_json::to_string(&comments).unwrap_or_default()
     } else {
-        run_git(project_path, &["log", "-1", "--format=%s", commit])
-            .map(|o| o.stdout.trim().to_string())
-            .unwrap_or_default()
+        git::log_subject(project_path, commit).unwrap_or_default()
     }
 }
 
@@ -448,11 +440,8 @@ fn translate_composite_line_numbers(
     current_commit: &str,
     file_path: &str,
 ) -> String {
-    let diff_output = match run_git(
-        project_path,
-        &["diff", prev_commit, current_commit, "--", file_path],
-    ) {
-        Ok(o) => o.stdout,
+    let diff_output = match git::diff_file(project_path, prev_commit, current_commit, file_path) {
+        Ok(o) => o,
         Err(_) => return prev_summary_metadata.to_string(),
     };
 

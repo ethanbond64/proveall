@@ -9,7 +9,7 @@ use crate::commands::project_commands::{
 use crate::db::schema::{event_issue_composite_xref, events};
 use crate::error::AppError;
 use crate::repositories::{branch_context_repo, event_repo, issue_repo, project_repo};
-use crate::utils::git::{diff_changed_files, parse_stat, run_git};
+use crate::utils::git::{self, diff_changed_files, parse_stat};
 
 #[cfg(test)]
 mod tests;
@@ -61,10 +61,7 @@ pub fn get_project_state(
 }
 
 fn current_branch(path: &str) -> Result<String, AppError> {
-    Ok(run_git(path, &["rev-parse", "--abbrev-ref", "HEAD"])?
-        .stdout
-        .trim()
-        .to_string())
+    git::current_branch(path)
 }
 
 fn build_diff_summary(path: &str, range: &str) -> Result<DiffSummary, AppError> {
@@ -73,9 +70,7 @@ fn build_diff_summary(path: &str, range: &str) -> Result<DiffSummary, AppError> 
     let files_modified = diff_files.iter().filter(|f| f.status == "M").count() as i32;
     let files_deleted = diff_files.iter().filter(|f| f.status == "D").count() as i32;
 
-    let shortstat_output = run_git(path, &["diff", "--shortstat", range])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
+    let shortstat_output = git::diff_shortstat(path, range).unwrap_or_default();
 
     let lines_added = parse_stat(&shortstat_output, "insertion") as i32;
     let lines_deleted = parse_stat(&shortstat_output, "deletion") as i32;
@@ -103,9 +98,7 @@ fn build_event_entries(
     }
 
     let format_arg = "--format=%H%n%s%n%an%n%ae%n%aI";
-    let log_output = run_git(path, &["log", "--no-merges", format_arg, range])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
+    let log_output = git::log_commits(path, format_arg, range).unwrap_or_default();
 
     let log_lines: Vec<&str> = log_output.lines().collect();
     let commits: Vec<CommitRecord> = log_lines

@@ -14,7 +14,7 @@ use crate::models::composite_file_review_state::ReviewSummaryMetadataEntry;
 use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, event_repo, issue_repo, project_repo,
 };
-use crate::utils::git::{diff_changed_files, run_git};
+use crate::utils::git::{self, diff_changed_files};
 
 #[cfg(test)]
 mod tests;
@@ -208,9 +208,7 @@ pub fn get_review_file_data(
 
     // Content: file at the commit (same for all review types)
     let ref_path = format!("{}:{}", commit, file_path);
-    let content = run_git(path, &["show", &ref_path])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
+    let content = git::show(path, &ref_path).unwrap_or_default();
 
     let (diff, line_summary, issues) = match review_type {
         ReviewType::Commit => {
@@ -220,11 +218,7 @@ pub fn get_review_file_data(
                 &branch_context.base_branch,
             )?;
             let base_file_ref = format!("{}:{}", base_ref, file_path);
-            let diff = Some(
-                run_git(path, &["show", &base_file_ref])
-                    .map(|o| o.stdout)
-                    .unwrap_or_default(),
-            );
+            let diff = Some(git::show(path, &base_file_ref).unwrap_or_default());
             let line_summary = build_branch_line_summary(
                 conn,
                 branch_context.head_event_id.as_deref(),
@@ -242,11 +236,7 @@ pub fn get_review_file_data(
         }
         ReviewType::Branch => {
             let base_ref = format!("{}:{}", branch_context.base_branch, file_path);
-            let diff = Some(
-                run_git(path, &["show", &base_ref])
-                    .map(|o| o.stdout)
-                    .unwrap_or_default(),
-            );
+            let diff = Some(git::show(path, &base_ref).unwrap_or_default());
             let line_summary =
                 build_branch_line_summary(conn, event_id, &file_path, branch_context_id, issue_id)?;
             let issues =

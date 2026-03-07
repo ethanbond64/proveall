@@ -150,9 +150,6 @@ pub fn get_current_branch(state: State<DbState>, project_id: String) -> Result<S
     let mut conn = state.0.lock().unwrap();
     let project = project_repo::get(&mut conn, &project_id).map_err(String::from)?;
 
-    // Get current branch using git
-    let output = crate::utils::git::run_git(&project.path, &["rev-parse", "--abbrev-ref", "HEAD"])
-        .map_err(|e| format!("Failed to get current branch: {}", e))?;
-
-    Ok(output.stdout.trim().to_string())
+    crate::utils::git::current_branch(&project.path)
+        .map_err(|e| format!("Failed to get current branch: {}", e))
 }
