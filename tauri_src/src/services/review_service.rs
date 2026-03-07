@@ -16,6 +16,9 @@ use crate::repositories::{
 };
 use crate::utils::git::{diff_changed_files, run_git};
 
+#[cfg(test)]
+mod tests;
+
 enum ReviewType {
     Commit,
     Branch,
