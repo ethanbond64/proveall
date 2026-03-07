@@ -179,41 +179,36 @@ fn create_intermediate_events(
 
     // Enumerate commits in the range (newest first)
     let range = format!("{}..{}", base_commit, target_commit);
-    let log_output = git::log_hashes(project_path, &range).unwrap_or_default();
-
-    let all_hashes: Vec<&str> = log_output.lines().filter(|l| !l.is_empty()).collect();
+    let all_commits = git::log(project_path, &[&range]).unwrap_or_default();
 
     // Remove the target commit (first in the list) and reverse to chronological order
-    let intermediate_hashes: Vec<&str> = all_hashes
+    let intermediate_commits: Vec<_> = all_commits
         .iter()
-        .filter(|h| **h != target_commit)
-        .copied()
+        .filter(|c| c.hash != target_commit)
         .rev()
         .collect();
 
-    if intermediate_hashes.is_empty() {
+    if intermediate_commits.is_empty() {
         return Ok(previous_event.cloned());
     }
 
     // Create intermediate events in chronological order, propagating xrefs through each
     let mut current_prev_event: Option<crate::models::event::Event> = previous_event.cloned();
 
-    for hash in intermediate_hashes {
-        let summary = git::log_subject(project_path, hash).unwrap_or_default();
-
+    for commit in intermediate_commits {
         let intermediate_event = event_repo::create(
             conn,
             NewEvent::new(
                 project_id.to_string(),
                 "commit".to_string(),
-                Some(hash.to_string()),
-                summary,
+                Some(commit.hash.clone()),
+                commit.subject.clone(),
             ),
         )?;
 
         // Only propagate xrefs if there is a previous event to propagate from
         if let Some(ref prev) = current_prev_event {
-            let prev_commit = prev.hash.as_deref().unwrap_or(hash);
+            let prev_commit = prev.hash.as_deref().unwrap_or(&commit.hash);
             propagate_previous_xrefs(
                 conn,
                 PropagateXrefsParams {
@@ -223,7 +218,7 @@ fn create_intermediate_events(
                     prev_commit,
                     resolved_issues,
                     project_path,
-                    commit: hash,
+                    commit: &commit.hash,
                     branch_context_id,
                 },
             )?;
@@ -250,7 +245,11 @@ fn build_event_summary(
             .collect();
         serde_json::to_string(&comments).unwrap_or_default()
     } else {
-        git::log_subject(project_path, commit).unwrap_or_default()
+        git::log(project_path, &["-1", commit])
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .map(|c| c.subject)
+            .unwrap_or_default()
     }
 }
 

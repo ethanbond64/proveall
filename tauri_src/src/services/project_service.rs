@@ -90,27 +90,7 @@ fn build_event_entries(
     range: &str,
     project_id: &str,
 ) -> Result<Vec<EventEntry>, AppError> {
-    struct CommitRecord {
-        hash: String,
-        message: String,
-        author: String,
-        date: String,
-    }
-
-    let format_arg = "--format=%H%n%s%n%an%n%ae%n%aI";
-    let log_output = git::log_commits(path, format_arg, range).unwrap_or_default();
-
-    let log_lines: Vec<&str> = log_output.lines().collect();
-    let commits: Vec<CommitRecord> = log_lines
-        .chunks(5)
-        .filter(|chunk: &&[&str]| chunk.len() == 5)
-        .map(|chunk| CommitRecord {
-            hash: chunk[0].to_string(),
-            message: chunk[1].to_string(),
-            author: chunk[2].to_string(),
-            date: chunk[4].to_string(),
-        })
-        .collect();
+    let commits = git::log(path, &["--no-merges", range]).unwrap_or_default();
 
     let commit_hashes: Vec<String> = commits.iter().map(|c| c.hash.clone()).collect();
 
@@ -149,7 +129,7 @@ fn build_event_entries(
                     event_type: "commit".to_string(),
                     commit: commit.hash.clone(),
                     author: Some(commit.author.clone()),
-                    message: commit.message.clone(),
+                    message: commit.subject.clone(),
                     created_at: commit.date.clone(),
                 }]
             }

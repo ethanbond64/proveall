@@ -57,28 +57,30 @@ pub fn diff_shortstat(project_path: &str, range: &str) -> Result<String, AppErro
         .stdout)
 }
 
-/// `git log --no-merges <format_arg> <range>` — raw log output.
-pub fn log_commits(
-    project_path: &str,
-    format_arg: &str,
-    range: &str,
-) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["log", "--no-merges", format_arg, range])?
-        .stdout)
+pub struct GitCommit {
+    pub hash: String,
+    pub subject: String,
+    pub author: String,
+    pub date: String,
 }
 
-/// `git log --format=%H <range>` — list of commit hashes (newest first).
-pub fn log_hashes(project_path: &str, range: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["log", "--format=%H", range])?
-        .stdout)
-}
-
-/// `git log -1 --format=%s <hash>` — commit subject line.
-pub fn log_subject(project_path: &str, hash: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["log", "-1", "--format=%s", hash])?
-        .stdout
-        .trim()
-        .to_string())
+/// Structured git log. Extra args (e.g. "--no-merges", range, "-1 <hash>")
+/// are appended after the format flag.
+pub fn log(project_path: &str, args: &[&str]) -> Result<Vec<GitCommit>, AppError> {
+    let mut cmd_args = vec!["log", "--format=%H%n%s%n%an%n%aI"];
+    cmd_args.extend_from_slice(args);
+    let output = run_git(project_path, &cmd_args)?;
+    let lines: Vec<&str> = output.stdout.lines().collect();
+    Ok(lines
+        .chunks(4)
+        .filter(|chunk| chunk.len() == 4)
+        .map(|chunk| GitCommit {
+            hash: chunk[0].to_string(),
+            subject: chunk[1].to_string(),
+            author: chunk[2].to_string(),
+            date: chunk[3].to_string(),
+        })
+        .collect())
 }
 
 /// `git show <git_ref>` — raw object/file content.
