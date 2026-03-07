@@ -73,7 +73,6 @@ pub fn log(project_path: &str, args: &[&str]) -> Result<Vec<GitCommit>, AppError
     let lines: Vec<&str> = output.stdout.lines().collect();
     Ok(lines
         .chunks(4)
-        .filter(|chunk| chunk.len() == 4)
         .map(|chunk| GitCommit {
             hash: chunk[0].to_string(),
             subject: chunk[1].to_string(),
