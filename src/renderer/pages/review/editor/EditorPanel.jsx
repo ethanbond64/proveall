@@ -3,7 +3,7 @@ import CodeEditor from './CodeEditor';
 import DiffEditor from './DiffEditor';
 import TabBar from './TabBar';
 import { useReviewContext } from '../ReviewContext';
-import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, MERGE_REVIEW_MODE} from "../../../constants";
+import {BRANCH_COMPARISON_MODE, isInteractiveReviewMode} from "../../../constants";
 
 function EditorPanel({ selectedFile, onActiveFileChange = (_) => {} }) {
   const context = useReviewContext();
@@ -157,7 +157,7 @@ function EditorPanel({ selectedFile, onActiveFileChange = (_) => {} }) {
                   filename={activeTab.fileName}
                   path={activeTab.relativePath}
                   lineReviews={fileReviews}
-                  readOnly={context.mode !== COMMIT_REVIEW_MODE && context.mode !== MERGE_REVIEW_MODE}
+                  readOnly={!isInteractiveReviewMode(context.mode)}
                 />
               ) : (
                 <CodeEditor

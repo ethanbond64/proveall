@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useCallback } from 'react';
-import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, MERGE_REVIEW_MODE} from "../../constants";
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, isInteractiveReviewMode} from "../../constants";
 import {hasIssues} from "../../utils/reviewUtils";
 
 // Create the context
@@ -602,7 +602,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           if (resolvedIssues.length === 0 && newIssues.length === 0) {
             throw new Error('No changes to save for this issue');
           }
-        } else if (state.mode === COMMIT_REVIEW_MODE || state.mode === MERGE_REVIEW_MODE) {
+        } else if (isInteractiveReviewMode(state.mode)) {
           // In commit mode, we don't enforce validation here
           // The save button should be disabled if not complete
           // This is just a safety check
@@ -700,7 +700,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
     // Check if all files are reviewed (for commit mode)
     const isComplete = (() => {
-      if (state.mode !== COMMIT_REVIEW_MODE && state.mode !== MERGE_REVIEW_MODE) return false;
+      if (!isInteractiveReviewMode(state.mode)) return false;
 
       // Check each file's progress
       for (const [path, progress] of fileProgress) {

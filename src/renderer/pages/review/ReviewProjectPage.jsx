@@ -4,7 +4,7 @@ import FileTree from './filetree/FileTree';
 import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
-import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE, MERGE_REVIEW_MODE } from '../../constants';
+import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE, MERGE_REVIEW_MODE, isInteractiveReviewMode } from '../../constants';
 import { hasIssues } from '../../utils/reviewUtils';
 import '../../styles.css';
 
@@ -107,7 +107,7 @@ function ReviewProjectPageInner({
       </div>
 
       {/* Commit Review Component - shows in commit-review and merge-review modes */}
-      {(context.mode === COMMIT_REVIEW_MODE || context.mode === MERGE_REVIEW_MODE) && (
+      {isInteractiveReviewMode(context.mode) && (
         <ReviewControls
           commitHash={context.commit}
           onSaveComplete={(eventId) => {

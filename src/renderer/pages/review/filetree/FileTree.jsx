@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import ReviewPopup from '../components/ReviewPopup';
-import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, MERGE_REVIEW_MODE} from "../../../constants";
+import {BRANCH_COMPARISON_MODE, isInteractiveReviewMode} from "../../../constants";
 import { isApproved } from '../../../utils/reviewUtils';
 
 // Component to render individual file with its own progress state
@@ -29,7 +29,7 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup, onHoverLeav
 
   const handleReviewHover = (e) => {
     e.stopPropagation();
-    if (context.mode !== COMMIT_REVIEW_MODE && context.mode !== MERGE_REVIEW_MODE) return;
+    if (!isInteractiveReviewMode(context.mode)) return;
     onShowPopup(e, file.path, fileProgress.defaultState);
   };
 
@@ -53,7 +53,7 @@ function FileTreeItem({ file, isSelected, onSelectFile, onShowPopup, onHoverLeav
           {fileName}
         </span>
 
-        {(context.mode === COMMIT_REVIEW_MODE || context.mode === MERGE_REVIEW_MODE) && (
+        {isInteractiveReviewMode(context.mode) && (
           <>
             {/* Diff mode indicator */}
             {file.diffMode && (
