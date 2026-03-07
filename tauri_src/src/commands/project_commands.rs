@@ -90,6 +90,8 @@ pub struct EventEntry {
     pub author: Option<String>,
     pub message: String,
     pub created_at: String,
+    pub is_base_merge: bool,
+    pub has_conflict_changes: bool,
 }
 
 #[derive(Serialize)]

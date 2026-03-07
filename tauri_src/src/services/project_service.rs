@@ -121,6 +121,8 @@ fn build_event_entries(
                         author: Some(commit.author.clone()),
                         message: ev.summary.clone(),
                         created_at: ev.created_at.to_string(),
+                        is_base_merge: false,
+                        has_conflict_changes: false,
                     })
                     .collect::<Vec<_>>()
             } else {
@@ -131,6 +133,8 @@ fn build_event_entries(
                     author: Some(commit.author.clone()),
                     message: commit.subject.clone(),
                     created_at: commit.date.clone(),
+                    is_base_merge: false,
+                    has_conflict_changes: false,
                 }]
             }
         })
