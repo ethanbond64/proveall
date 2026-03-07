@@ -1,105 +1,11 @@
 use crate::commands::event_commands::{NewIssueInput, NewIssueReviewInput};
-use crate::models::branch_context::NewBranchContext;
-use crate::models::project::NewProject;
-use crate::repositories::{branch_context_repo, issue_repo, project_repo};
+use crate::repositories::issue_repo;
 use crate::services::event_service::create_event;
 use crate::services::review_service::{get_review_file_data, get_review_file_system_data};
-use diesel::prelude::*;
+use crate::test_utils::*;
 use diesel::sqlite::SqliteConnection;
-use diesel_migrations::MigrationHarness;
 use std::process::Command;
 use tempfile::TempDir;
-
-fn test_conn() -> SqliteConnection {
-    let mut conn =
-        SqliteConnection::establish(":memory:").expect("Failed to create in-memory connection");
-    diesel::sql_query("PRAGMA foreign_keys = ON")
-        .execute(&mut conn)
-        .ok();
-    conn.run_pending_migrations(crate::db::connection::MIGRATIONS)
-        .expect("Failed to run migrations");
-    conn
-}
-
-fn setup_git_repo() -> (TempDir, String) {
-    let dir = TempDir::new().expect("Failed to create temp dir");
-    let path = dir.path();
-
-    let git = |args: &[&str]| {
-        Command::new("git")
-            .args(args)
-            .current_dir(path)
-            .output()
-            .expect("git command failed")
-    };
-
-    git(&["init", "-b", "main"]);
-    git(&["config", "user.email", "test@test.com"]);
-    git(&["config", "user.name", "Test"]);
-
-    // Create initial commit on main with a base file
-    std::fs::write(path.join("base.txt"), "base\n").unwrap();
-    git(&["add", "."]);
-    git(&["commit", "-m", "initial"]);
-
-    let output = git(&["rev-parse", "HEAD"]);
-    let base_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    (dir, base_hash)
-}
-
-fn git_rev_parse(dir: &TempDir) -> String {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
-}
-
-fn git_commit(dir: &TempDir, message: &str) -> String {
-    Command::new("git")
-        .args(["add", "."])
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "-m", message])
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
-    git_rev_parse(dir)
-}
-
-fn setup_db_records(conn: &mut SqliteConnection, repo_path: &str) -> (String, String) {
-    setup_db_records_with_branch(conn, repo_path, "main", "main")
-}
-
-fn setup_db_records_with_branch(
-    conn: &mut SqliteConnection,
-    repo_path: &str,
-    branch: &str,
-    base_branch: &str,
-) -> (String, String) {
-    let project = project_repo::create(
-        conn,
-        NewProject::new(repo_path.to_string(), Some("test".to_string())),
-    )
-    .expect("Failed to create project");
-
-    let bc = branch_context_repo::create(
-        conn,
-        NewBranchContext::new(
-            project.id.clone(),
-            branch.to_string(),
-            base_branch.to_string(),
-            "{}".to_string(),
-        ),
-    )
-    .expect("Failed to create branch context");
-
-    (project.id, bc.id)
-}
 
 // ---------------------------------------------------------------------------
 // get_review_file_system_data tests
@@ -473,16 +379,6 @@ fn test_file_data_with_issue_returns_line_summary() {
 // Branch-mode get_review_file_system_data tests
 // ---------------------------------------------------------------------------
 
-/// Helper: create a repo with main, then checkout a feature branch.
-/// Returns (dir, feature_branch_name).
-fn setup_feature_branch(dir: &TempDir) {
-    Command::new("git")
-        .args(["checkout", "-b", "feature"])
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
-}
-
 #[test]
 fn test_branch_file_system_data_added_modified_deleted() {
     let mut conn = test_conn();
@@ -535,12 +431,16 @@ fn test_branch_file_system_data_added_modified_deleted() {
 
     // All files should have state "green" (no issues filed)
     for f in &result.touched_files {
-        assert_eq!(f.state, "green", "file {} should be green with no issues", f.path);
+        assert_eq!(
+            f.state, "green",
+            "file {} should be green with no issues",
+            f.path
+        );
     }
 }
 
 /// Sets up a feature branch with two files (a.txt, b.txt) and issues on each.
-/// Returns (conn, project_id, bc_id, commit_hash, issue_a_id, issue_b_id).
+/// Returns (conn, dir, project_id, bc_id, commit_hash, issue_a_id, issue_b_id).
 fn setup_branch_two_file_issues() -> (
     SqliteConnection,
     TempDir,

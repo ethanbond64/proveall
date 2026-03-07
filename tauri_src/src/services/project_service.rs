@@ -11,6 +11,9 @@ use crate::error::AppError;
 use crate::repositories::{branch_context_repo, event_repo, issue_repo, project_repo};
 use crate::utils::git::{diff_changed_files, parse_stat, run_git};
 
+#[cfg(test)]
+mod tests;
+
 pub fn get_project_state(
     conn: &mut SqliteConnection,
     project_id: &str,

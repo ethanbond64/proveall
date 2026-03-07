@@ -18,6 +18,8 @@ mod error;
 mod models;
 mod repositories;
 mod services;
+#[cfg(test)]
+mod test_utils;
 mod utils;
 
 pub struct DbState(pub Mutex<SqliteConnection>);
