@@ -1,9 +1,8 @@
 #!/bin/bash
 set -e
 
-REPO_DIR="$(git rev-parse --show-toplevel)/tmp/test_repo"
-
-rm -rf "$REPO_DIR"
+HASH=$(openssl rand -hex 4)
+REPO_DIR="$(git rev-parse --show-toplevel)/tmp/test_repo_${HASH}"
 mkdir -p "$REPO_DIR"
 cd "$REPO_DIR"
 
