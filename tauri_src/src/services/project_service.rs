@@ -205,14 +205,12 @@ fn lazy_create_base_merge_events(
         }
 
         // Find the previous event (the next entry in the array, which is one
-        // commit older) to propagate xrefs from.
+        // commit older) to propagate xrefs from. If this merge is the oldest
+        // commit on the branch, there's no previous event and no xrefs to propagate.
         let prev_event_id = if i + 1 < len {
             entries[i + 1].id.clone()
         } else {
-            // This merge is the oldest commit on the branch — no previous event.
-            // Read from branch_context in case there's a head_event_id from before.
-            branch_context_repo::get(conn, branch_context_id)?
-                .head_event_id
+            None
         };
 
         let commit_hash = entries[i].commit.clone();
