@@ -67,18 +67,25 @@ pub struct GitCommit {
 /// Structured git log. Extra args (e.g. "--no-merges", range, "-1 <hash>")
 /// are appended after the format flag.
 pub fn log(project_path: &str, args: &[&str]) -> Result<Vec<GitCommit>, AppError> {
-    let mut cmd_args = vec!["log", "--format=%H%n%s%n%an%n%aI"];
+    let mut cmd_args = vec!["log", "--format=%H%x00%s%x00%an%x00%aI"];
     cmd_args.extend_from_slice(args);
     let output = run_git(project_path, &cmd_args)?;
-    let lines: Vec<&str> = output.stdout.lines().collect();
-    Ok(lines
-        .chunks(4)
-        .filter(|chunk| chunk.len() == 4)
-        .map(|chunk| GitCommit {
-            hash: chunk[0].to_string(),
-            subject: chunk[1].to_string(),
-            author: chunk[2].to_string(),
-            date: chunk[3].to_string(),
+    Ok(output
+        .stdout
+        .lines()
+        .filter(|l| !l.is_empty())
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(4, '\0').collect();
+            if parts.len() == 4 {
+                Some(GitCommit {
+                    hash: parts[0].to_string(),
+                    subject: parts[1].to_string(),
+                    author: parts[2].to_string(),
+                    date: parts[3].to_string(),
+                })
+            } else {
+                None
+            }
         })
         .collect())
 }
