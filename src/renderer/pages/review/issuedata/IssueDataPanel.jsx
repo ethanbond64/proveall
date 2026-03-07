@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useReviewContext } from '../ReviewContext';
 import IssueResolveConfirmation from '../components/IssueResolveConfirmation';
-import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../../constants";
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, MERGE_REVIEW_MODE} from "../../../constants";
 
 
 // Issue card component - simplified and cleaner
@@ -112,7 +112,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
   // Handle resolve button click - show confirmation only in branch mode
   const handleResolveClick = useCallback((issue) => {
     // In commit mode, just stage the resolution locally without confirmation
-    if (context.mode === COMMIT_REVIEW_MODE) {
+    if (context.mode === COMMIT_REVIEW_MODE || context.mode === MERGE_REVIEW_MODE) {
       context.actions.resolveIssue(issue.id);
     } else {
       // In branch mode, show confirmation popup
@@ -192,7 +192,7 @@ function IssueDataPanel({ selectedFile, onNavigateBack, onNavigateToIssue, highl
                     unresolvedExistingIssues.length > 0;
 
   // In branch mode, can't create/edit issues, but can resolve them
-  const canCreateEdit = context.mode === COMMIT_REVIEW_MODE;
+  const canCreateEdit = context.mode === COMMIT_REVIEW_MODE || context.mode === MERGE_REVIEW_MODE;
   const canResolve = true; // All modes can resolve issues
 
   return (

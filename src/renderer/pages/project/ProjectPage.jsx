@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE, MERGE_REVIEW_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
@@ -23,13 +23,14 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   console.log({branchData});
 
   // Find the oldest unreviewed commit (commits are ordered newest to oldest)
-  // Using useMemo to ensure this recalculates when commits or projectState changes
+  // Non-conflicted base-branch merges are auto-reviewed and skipped.
+  // Conflicted base-branch merges (has_conflict_changes) require manual review.
   const oldestUnreviewedCommit = useMemo(() => {
-    // Start from the end (oldest) and work backwards to find the last unreviewed commit
     for (let i = commits.length - 1; i >= 0; i--) {
       const event = commits[i];
-      // Events with id are reviewed, without id are unreviewed
       if (event.id === null && event.event_type === 'commit') {
+        // Skip non-conflicted base merges — they are auto-reviewed
+        if (event.is_base_merge && !event.has_conflict_changes) continue;
         return event;
       }
     }
@@ -43,15 +44,18 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   }, [commits, oldestUnreviewedCommit]);
 
   // Compute the set of commits in the selected bulk range
+  // Non-conflicted base merges are excluded (auto-reviewed).
   const selectedRange = useMemo(() => {
     if (!selectedTargetCommit || !oldestUnreviewedCommit) return new Set();
     const targetIndex = commits.findIndex(e => e.commit === selectedTargetCommit && e.event_type === 'commit');
     if (targetIndex < 0 || oldestUnreviewedIndex < 0) return new Set();
-    // commits are newest-first, so target is at a lower index than oldest
     const rangeCommits = new Set();
     for (let i = targetIndex; i <= oldestUnreviewedIndex; i++) {
-      if (commits[i].id === null && commits[i].event_type === 'commit') {
-        rangeCommits.add(commits[i].commit);
+      const c = commits[i];
+      if (c.id === null && c.event_type === 'commit') {
+        // Skip non-conflicted base merges
+        if (c.is_base_merge && !c.has_conflict_changes) continue;
+        rangeCommits.add(c.commit);
       }
     }
     return rangeCommits;
@@ -135,6 +139,12 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     // Only allow clicking unreviewed commits at or above oldestUnreviewedCommit
     if (clickedIndex < 0 || clickedIndex > oldestUnreviewedIndex) return;
     if (event.id !== null || event.event_type !== 'commit') return;
+
+    // Conflicted base merges navigate directly to merge review
+    if (event.is_base_merge && event.has_conflict_changes) {
+      onNavigateToReview(event.commit, MERGE_REVIEW_MODE);
+      return;
+    }
 
     // If this is the next-to-review commit, navigate directly to review
     if (event.commit === oldestUnreviewedCommit.commit) {
@@ -222,10 +232,15 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               commits.map((event, index) => {
                 const isResolution = event.event_type === 'resolution';
                 const isReviewed = event.id !== null;
+                const isBaseMerge = event.is_base_merge;
+                const isConflictedMerge = isBaseMerge && event.has_conflict_changes;
+                // Non-conflicted base merges are auto-handled — not clickable, not reviewable
+                const isAutoMerge = isBaseMerge && !event.has_conflict_changes;
                 // Check if this is the next commit to review
-                const isNextToReview = !isResolution && oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit;
+                const isNextToReview = !isResolution && !isAutoMerge && oldestUnreviewedCommit && event.commit === oldestUnreviewedCommit.commit;
                 // Can click any unreviewed commit at or above oldestUnreviewedCommit
-                const isUnreviewedInRange = !isResolution && !isReviewed && oldestUnreviewedIndex >= 0 && index <= oldestUnreviewedIndex;
+                // Non-conflicted base merges are never clickable. Conflicted merges are clickable when unreviewed.
+                const isUnreviewedInRange = !isResolution && !isReviewed && !isAutoMerge && oldestUnreviewedIndex >= 0 && index <= oldestUnreviewedIndex;
                 const canReview = isUnreviewedInRange;
                 // Is this commit in the selected bulk range?
                 const isInSelectedRange = selectedRange.has(event.commit);
@@ -235,14 +250,20 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                 return (
                   <div
                     key={index}
-                    className={`commit-item ${canReview ? 'commit-item-clickable' : ''} ${isNextToReview && !isBulkSelection ? 'commit-item-next' : ''} ${isInSelectedRange ? 'commit-item-in-range' : ''} ${isSelectedTarget ? 'commit-item-selected' : ''}`}
+                    className={`commit-item ${canReview ? 'commit-item-clickable' : ''} ${isAutoMerge ? 'commit-item-merge' : ''} ${isNextToReview && !isBulkSelection ? 'commit-item-next' : ''} ${isInSelectedRange ? 'commit-item-in-range' : ''} ${isSelectedTarget ? 'commit-item-selected' : ''}`}
                     onClick={() => canReview && handleCommitClick(event)}
-                    title={canReview ? 'Click to select for review' : (isReviewed ? 'Already reviewed' : (isResolution ? 'Resolution event' : ''))}
+                    title={isAutoMerge ? 'Base branch merge (auto-reviewed)' : (canReview ? 'Click to select for review' : (isReviewed ? 'Already reviewed' : (isResolution ? 'Resolution event' : '')))}
                   >
                     <div className="commit-item-header">
                       <div className="commit-hash">{event.commit?.substring(0, 7)}</div>
                       {isResolution && (
                         <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>RESOLUTION</div>
+                      )}
+                      {isConflictedMerge && !isReviewed && (
+                        <div className="commit-merge-badge" style={{ color: '#f48771', backgroundColor: 'rgba(244, 135, 113, 0.15)', borderColor: 'rgba(244, 135, 113, 0.3)' }}>REVIEW MERGE</div>
+                      )}
+                      {isAutoMerge && (
+                        <div className="commit-merge-badge">MERGE</div>
                       )}
                       {isNextToReview && !isBulkSelection && (
                         <div className="commit-next-badge" title="Next commit to review">

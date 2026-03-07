@@ -4,7 +4,7 @@ import FileTree from './filetree/FileTree';
 import EditorPanel from './editor/EditorPanel';
 import ReviewControls from './controls/ReviewControls';
 import IssueDataPanel from './issuedata/IssueDataPanel';
-import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
+import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE, MERGE_REVIEW_MODE } from '../../constants';
 import { hasIssues } from '../../utils/reviewUtils';
 import '../../styles.css';
 
@@ -106,8 +106,8 @@ function ReviewProjectPageInner({
         )}
       </div>
 
-      {/* Commit Review Component - only shows in commit-review mode */}
-      {context.mode === COMMIT_REVIEW_MODE && (
+      {/* Commit Review Component - shows in commit-review and merge-review modes */}
+      {(context.mode === COMMIT_REVIEW_MODE || context.mode === MERGE_REVIEW_MODE) && (
         <ReviewControls
           commitHash={context.commit}
           onSaveComplete={(eventId) => {
@@ -117,6 +117,14 @@ function ReviewProjectPageInner({
             }
           }}
         />
+      )}
+
+      {/* Merge Review Mode Indicator */}
+      {context.mode === MERGE_REVIEW_MODE && (
+        <div className="branch-comparison-banner" style={{ borderColor: 'rgba(244, 135, 113, 0.3)', backgroundColor: 'rgba(244, 135, 113, 0.05)' }}>
+          <span className="mode-indicator" style={{ color: '#f48771' }}>Merge Conflict Review</span>
+          <span className="mode-description">Reviewing conflict resolutions from base branch merge</span>
+        </div>
       )}
 
       {/* Branch Comparison Mode Indicator */}

@@ -22,6 +22,7 @@ mod tests;
 enum ReviewType {
     Commit,
     Branch,
+    MergeReview,
 }
 
 impl ReviewType {
@@ -29,6 +30,7 @@ impl ReviewType {
         match s {
             "commit" => Ok(ReviewType::Commit),
             "branch" => Ok(ReviewType::Branch),
+            "merge_review" => Ok(ReviewType::MergeReview),
             _ => Err(AppError::NotFound(format!("Unknown review type: {}", s))),
         }
     }
@@ -77,6 +79,15 @@ pub fn get_review_file_system_data(
                 issue_id,
             )?,
             build_issues_from_event(conn, event_id, None, branch_context_id)?,
+        ),
+        ReviewType::MergeReview => (
+            build_merge_review_touched_files(path, &commit)?,
+            build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                None,
+                branch_context_id,
+            )?,
         ),
     };
 
@@ -178,6 +189,26 @@ fn build_branch_touched_files(
         .collect())
 }
 
+/// Build touched files for merge review — only files with conflict resolution changes.
+/// Uses `git diff-tree --cc --name-only` which lists only files where the merge commit
+/// differs from ALL parents (i.e., conflict resolutions).
+fn build_merge_review_touched_files(
+    project_path: &str,
+    commit: &str,
+) -> Result<Vec<TouchedFile>, AppError> {
+    let output = git::diff_tree_cc_name_only(project_path, commit)?;
+    Ok(output
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|file_path| TouchedFile {
+            name: extract_file_name(file_path),
+            path: file_path.to_string(),
+            diff_mode: Some("M".to_string()),
+            state: "red".to_string(),
+        })
+        .collect())
+}
+
 fn extract_file_name(file_path: &str) -> String {
     Path::new(file_path)
         .file_name()
@@ -241,6 +272,26 @@ pub fn get_review_file_data(
                 build_branch_line_summary(conn, event_id, &file_path, branch_context_id, issue_id)?;
             let issues =
                 build_issues_from_event(conn, event_id, Some(&file_path), branch_context_id)?;
+            (diff, line_summary, issues)
+        }
+        ReviewType::MergeReview => {
+            // For merge review, show the first parent's version as the "before" (feature branch
+            // before the merge) so the user sees only what the conflict resolution changed.
+            let first_parent_ref = format!("{}^1:{}", commit, file_path);
+            let diff = Some(git::show(path, &first_parent_ref).unwrap_or_default());
+            let line_summary = build_branch_line_summary(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                &file_path,
+                branch_context_id,
+                None,
+            )?;
+            let issues = build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                Some(&file_path),
+                branch_context_id,
+            )?;
             (diff, line_summary, issues)
         }
     };

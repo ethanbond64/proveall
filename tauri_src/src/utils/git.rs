@@ -152,6 +152,19 @@ pub fn diff_tree_cc(project_path: &str, hash: &str) -> Result<String, AppError> 
         .stdout)
 }
 
+/// `git diff-tree --cc --name-only <hash>` — list files with conflict changes only.
+/// The first line of output is the commit hash, so we skip it.
+pub fn diff_tree_cc_name_only(project_path: &str, hash: &str) -> Result<String, AppError> {
+    let output = run_git(project_path, &["diff-tree", "--cc", "--name-only", hash])?;
+    // First line is the commit hash — skip it
+    Ok(output
+        .stdout
+        .lines()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
 // ---------------------------------------------------------------------------
 // Composite helpers
 // ---------------------------------------------------------------------------
