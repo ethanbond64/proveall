@@ -62,22 +62,28 @@ pub struct GitCommit {
     pub subject: String,
     pub author: String,
     pub date: String,
+    pub parents: Vec<String>, // empty for root, 1 for normal, 2+ for merge
 }
 
 /// Structured git log. Extra args (e.g. "--no-merges", range, "-1 <hash>")
 /// are appended after the format flag.
 pub fn log(project_path: &str, args: &[&str]) -> Result<Vec<GitCommit>, AppError> {
-    let mut cmd_args = vec!["log", "--format=%H%n%s%n%an%n%aI"];
+    let mut cmd_args = vec!["log", "--format=%H%n%P%n%s%n%an%n%aI"];
     cmd_args.extend_from_slice(args);
     let output = run_git(project_path, &cmd_args)?;
     let lines: Vec<&str> = output.stdout.lines().collect();
     Ok(lines
-        .chunks(4)
+        .chunks(5)
         .map(|chunk| GitCommit {
             hash: chunk[0].to_string(),
-            subject: chunk[1].to_string(),
-            author: chunk[2].to_string(),
-            date: chunk[3].to_string(),
+            parents: chunk[1]
+                .split_whitespace()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect(),
+            subject: chunk[2].to_string(),
+            author: chunk[3].to_string(),
+            date: chunk[4].to_string(),
         })
         .collect())
 }
@@ -114,6 +120,36 @@ pub fn status_porcelain(project_path: &str) -> Result<String, AppError> {
 pub fn commit(project_path: &str, message: &str) -> Result<(), AppError> {
     run_git(project_path, &["commit", "-m", message])?;
     Ok(())
+}
+
+/// `git merge-base --is-ancestor <ancestor> <descendant>` — returns true if ancestor
+/// is an ancestor of descendant.
+pub fn is_ancestor(project_path: &str, ancestor: &str, descendant: &str) -> bool {
+    run_git(
+        project_path,
+        &["merge-base", "--is-ancestor", ancestor, descendant],
+    )
+    .is_ok()
+}
+
+/// Classify whether a merge commit is a base-branch merge.
+/// A merge commit is a "base-branch merge" if any of its parents is an ancestor
+/// of the base branch tip — meaning the user merged base into their feature branch.
+pub fn is_base_branch_merge(project_path: &str, parents: &[String], base_branch: &str) -> bool {
+    let base_hash = match rev_parse(project_path, base_branch) {
+        Ok(h) => h,
+        Err(_) => return false,
+    };
+    parents
+        .iter()
+        .any(|p| is_ancestor(project_path, p, &base_hash))
+}
+
+/// `git diff-tree --cc -p <hash>` — combined diff for a merge commit.
+/// Returns non-empty output only when there were conflict resolutions.
+pub fn diff_tree_cc(project_path: &str, hash: &str) -> Result<String, AppError> {
+    Ok(run_git(project_path, &["diff-tree", "--cc", "-p", hash])?
+        .stdout)
 }
 
 // ---------------------------------------------------------------------------
