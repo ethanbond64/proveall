@@ -46,7 +46,7 @@ pub fn get_project_state(
 
     let range = format!("{}..HEAD", base_branch);
     let diff_summary = build_diff_summary(path, &range)?;
-    let event_entries = build_event_entries(conn, path, &range, project_id)?;
+    let event_entries = build_event_entries(conn, path, &range, project_id, &base_branch)?;
     let issue_entries = build_issue_entries(conn, bc.head_event_id.as_deref(), branch_context_id)?;
 
     Ok(ProjectStateResponse {
@@ -89,8 +89,9 @@ fn build_event_entries(
     path: &str,
     range: &str,
     project_id: &str,
+    base_branch: &str,
 ) -> Result<Vec<EventEntry>, AppError> {
-    let commits = git::log(path, &["--no-merges", range]).unwrap_or_default();
+    let commits = git::log(path, &[range]).unwrap_or_default();
 
     let commit_hashes: Vec<String> = commits.iter().map(|c| c.hash.clone()).collect();
 
@@ -111,6 +112,14 @@ fn build_event_entries(
     let entries: Vec<EventEntry> = commits
         .iter()
         .flat_map(|commit| {
+            let is_merge = commit.parents.len() > 1;
+            let is_base_merge = is_merge
+                && git::is_base_branch_merge(path, &commit.parents, base_branch);
+            let has_conflict_changes = is_base_merge
+                && git::diff_tree_cc(path, &commit.hash)
+                    .map(|output| !output.trim().is_empty())
+                    .unwrap_or(false);
+
             if let Some(evs) = events_by_hash.get_mut(&commit.hash) {
                 evs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
                 evs.iter()
@@ -121,8 +130,8 @@ fn build_event_entries(
                         author: Some(commit.author.clone()),
                         message: ev.summary.clone(),
                         created_at: ev.created_at.to_string(),
-                        is_base_merge: false,
-                        has_conflict_changes: false,
+                        is_base_merge,
+                        has_conflict_changes,
                     })
                     .collect::<Vec<_>>()
             } else {
@@ -133,8 +142,8 @@ fn build_event_entries(
                     author: Some(commit.author.clone()),
                     message: commit.subject.clone(),
                     created_at: commit.date.clone(),
-                    is_base_merge: false,
-                    has_conflict_changes: false,
+                    is_base_merge,
+                    has_conflict_changes,
                 }]
             }
         })
