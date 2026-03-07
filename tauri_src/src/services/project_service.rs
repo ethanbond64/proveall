@@ -6,14 +6,24 @@ use diesel::sqlite::SqliteConnection;
 use crate::commands::project_commands::{
     BranchData, DiffSummary, EventEntry, IssueEntry, ProjectStateResponse,
 };
-use crate::db::schema::{event_issue_composite_xref, events};
+use crate::db::schema::{branch_context, event_issue_composite_xref, events};
 use crate::error::AppError;
+use crate::models::event::NewEvent;
 use crate::repositories::{branch_context_repo, event_repo, issue_repo, project_repo};
+use crate::services::event_service::{propagate_previous_xrefs, PropagateXrefsParams};
 use crate::utils::git::{self, diff_changed_files, parse_stat};
 
 #[cfg(test)]
 mod tests;
 
+/// Build the full project state for a branch context.
+///
+/// **Side effects:** This read path lazily creates events for base-branch merge commits.
+/// When all commits older than a base-branch merge already have events, this function
+/// auto-creates an event for the merge, propagates xrefs (with skip_file_translation
+/// so only feature-branch file changes are tracked), and advances the branch_context
+/// head_event_id. This keeps the xref chain intact without requiring user interaction
+/// for base-branch merges.
 pub fn get_project_state(
     conn: &mut SqliteConnection,
     project_id: &str,
@@ -46,7 +56,20 @@ pub fn get_project_state(
 
     let range = format!("{}..HEAD", base_branch);
     let diff_summary = build_diff_summary(path, &range)?;
-    let event_entries = build_event_entries(conn, path, &range, project_id, &base_branch)?;
+    let mut event_entries = build_event_entries(conn, path, &range, project_id, &base_branch)?;
+
+    // Side effect: lazily create events for base-branch merge commits whose
+    // predecessors all have events already. This maintains the xref chain.
+    lazy_create_base_merge_events(
+        conn,
+        &mut event_entries,
+        project_id,
+        path,
+        branch_context_id,
+    )?;
+
+    // Re-read branch_context since lazy creation may have updated head_event_id.
+    let bc = branch_context_repo::get(conn, branch_context_id)?;
     let issue_entries = build_issue_entries(conn, bc.head_event_id.as_deref(), branch_context_id)?;
 
     Ok(ProjectStateResponse {
@@ -150,6 +173,95 @@ fn build_event_entries(
         .collect();
 
     Ok(entries)
+}
+
+/// Iterate event entries oldest-to-newest. For each base-branch merge commit that
+/// has no event yet (`id: None`), check if every older commit already has an event.
+/// If so, auto-create a commit event, propagate xrefs from the previous event
+/// (with `skip_file_translation: true`), and advance `head_event_id`.
+///
+/// This ensures that once a user reviews up to a merge commit, the merge gets
+/// an event automatically so the xref chain remains unbroken for the next real review.
+fn lazy_create_base_merge_events(
+    conn: &mut SqliteConnection,
+    entries: &mut Vec<EventEntry>,
+    project_id: &str,
+    project_path: &str,
+    branch_context_id: &str,
+) -> Result<(), AppError> {
+    // entries are newest-first (git log order). Walk oldest-to-newest.
+    // Track the most recent event id we've seen so far (for xref propagation).
+    let len = entries.len();
+    for i in (0..len).rev() {
+        if !entries[i].is_base_merge || entries[i].id.is_some() {
+            continue;
+        }
+
+        // Check that ALL entries older than this one (indices i+1..len, since
+        // entries are newest-first) have events.
+        let all_older_have_events = entries[i + 1..].iter().all(|e| e.id.is_some());
+        if !all_older_have_events {
+            continue;
+        }
+
+        // Find the previous event (the next entry in the array, which is one
+        // commit older) to propagate xrefs from.
+        let prev_event_id = if i + 1 < len {
+            entries[i + 1].id.clone()
+        } else {
+            // This merge is the oldest commit on the branch — no previous event.
+            // Read from branch_context in case there's a head_event_id from before.
+            branch_context_repo::get(conn, branch_context_id)?
+                .head_event_id
+        };
+
+        let commit_hash = entries[i].commit.clone();
+
+        // Create the event for this merge commit
+        let event = event_repo::create(
+            conn,
+            NewEvent::new(
+                project_id.to_string(),
+                "commit".to_string(),
+                Some(commit_hash.clone()),
+                entries[i].message.clone(),
+            ),
+        )?;
+        let new_event_id = event.id.clone();
+
+        // Propagate xrefs from the previous event, skipping file translation
+        // since base-branch merge file changes aren't feature-branch work.
+        if let Some(ref prev_id) = prev_event_id {
+            let prev_event = event_repo::get(conn, prev_id)?;
+            let prev_commit = prev_event.hash.as_deref().unwrap_or(&commit_hash);
+            propagate_previous_xrefs(
+                conn,
+                PropagateXrefsParams {
+                    project_id,
+                    new_event_id: &new_event_id,
+                    prev_event_id: prev_id,
+                    prev_commit,
+                    resolved_issues: &[],
+                    project_path,
+                    commit: &commit_hash,
+                    branch_context_id,
+                    skip_file_translation: true,
+                },
+            )?;
+        }
+
+        // Advance head_event_id to the newly created merge event
+        branch_context_repo::update(
+            conn,
+            branch_context_id,
+            branch_context::head_event_id.eq(&new_event_id),
+        )?;
+
+        // Update the entry in-place so the frontend sees the created event
+        entries[i].id = Some(new_event_id);
+    }
+
+    Ok(())
 }
 
 fn build_issue_entries(

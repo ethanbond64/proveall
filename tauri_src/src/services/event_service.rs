@@ -325,19 +325,19 @@ fn create_composite_with_xref(
     Ok(())
 }
 
-struct PropagateXrefsParams<'a> {
-    project_id: &'a str,
-    new_event_id: &'a str,
-    prev_event_id: &'a str,
-    prev_commit: &'a str,
-    resolved_issues: &'a [String],
-    project_path: &'a str,
-    commit: &'a str,
-    branch_context_id: &'a str,
-    skip_file_translation: bool,
+pub(crate) struct PropagateXrefsParams<'a> {
+    pub(crate) project_id: &'a str,
+    pub(crate) new_event_id: &'a str,
+    pub(crate) prev_event_id: &'a str,
+    pub(crate) prev_commit: &'a str,
+    pub(crate) resolved_issues: &'a [String],
+    pub(crate) project_path: &'a str,
+    pub(crate) commit: &'a str,
+    pub(crate) branch_context_id: &'a str,
+    pub(crate) skip_file_translation: bool,
 }
 
-fn propagate_previous_xrefs(
+pub(crate) fn propagate_previous_xrefs(
     conn: &mut SqliteConnection,
     params: PropagateXrefsParams,
 ) -> Result<(), AppError> {
