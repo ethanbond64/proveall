@@ -115,3 +115,23 @@ pub fn setup_feature_branch(dir: &TempDir) {
         .output()
         .unwrap();
 }
+
+/// Merge the given branch into the current branch (no fast-forward).
+/// Returns the merge commit hash.
+pub fn git_merge(dir: &TempDir, branch: &str) -> String {
+    Command::new("git")
+        .args(["merge", "--no-ff", branch, "-m", &format!("Merge {} into HEAD", branch)])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    git_rev_parse(dir)
+}
+
+/// Switch to an existing branch.
+pub fn git_checkout(dir: &TempDir, branch: &str) {
+    Command::new("git")
+        .args(["checkout", branch])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+}

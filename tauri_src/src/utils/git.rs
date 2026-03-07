@@ -146,10 +146,16 @@ pub fn is_base_branch_merge(project_path: &str, parents: &[String], base_branch:
 }
 
 /// `git diff-tree --cc -p <hash>` — combined diff for a merge commit.
-/// Returns non-empty output only when there were conflict resolutions.
+/// The first line of output is always the commit hash, so we skip it.
+/// After skipping, non-empty output indicates conflict resolution changes.
 pub fn diff_tree_cc(project_path: &str, hash: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["diff-tree", "--cc", "-p", hash])?
-        .stdout)
+    let output = run_git(project_path, &["diff-tree", "--cc", "-p", hash])?;
+    Ok(output
+        .stdout
+        .lines()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 /// `git diff-tree --cc --name-only <hash>` — list files with conflict changes only.
