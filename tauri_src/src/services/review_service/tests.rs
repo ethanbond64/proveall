@@ -72,6 +72,15 @@ fn git_commit(dir: &TempDir, message: &str) -> String {
 }
 
 fn setup_db_records(conn: &mut SqliteConnection, repo_path: &str) -> (String, String) {
+    setup_db_records_with_branch(conn, repo_path, "main", "main")
+}
+
+fn setup_db_records_with_branch(
+    conn: &mut SqliteConnection,
+    repo_path: &str,
+    branch: &str,
+    base_branch: &str,
+) -> (String, String) {
     let project = project_repo::create(
         conn,
         NewProject::new(repo_path.to_string(), Some("test".to_string())),
@@ -82,8 +91,8 @@ fn setup_db_records(conn: &mut SqliteConnection, repo_path: &str) -> (String, St
         conn,
         NewBranchContext::new(
             project.id.clone(),
-            "main".to_string(),
-            "main".to_string(),
+            branch.to_string(),
+            base_branch.to_string(),
             "{}".to_string(),
         ),
     )
@@ -458,4 +467,289 @@ fn test_file_data_with_issue_returns_line_summary() {
     assert_eq!(result.line_summary[0].state, "red");
     assert_eq!(result.issues.len(), 1);
     assert_eq!(result.issues[0].comment, "needs review");
+}
+
+// ---------------------------------------------------------------------------
+// Branch-mode get_review_file_system_data tests
+// ---------------------------------------------------------------------------
+
+/// Helper: create a repo with main, then checkout a feature branch.
+/// Returns (dir, feature_branch_name).
+fn setup_feature_branch(dir: &TempDir) {
+    Command::new("git")
+        .args(["checkout", "-b", "feature"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+}
+
+#[test]
+fn test_branch_file_system_data_added_modified_deleted() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // Commit 1: add a new file and modify base.txt
+    std::fs::write(dir.path().join("base.txt"), "modified on feature\n").unwrap();
+    std::fs::write(dir.path().join("feature_file.txt"), "new content\n").unwrap();
+    let _c1 = git_commit(&dir, "add and modify on feature");
+
+    // Commit 2: delete base.txt
+    Command::new("git")
+        .args(["rm", "base.txt"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let c2 = git_commit(&dir, "delete base.txt on feature");
+
+    // Branch-mode diff is main..HEAD, so it accumulates all changes on the branch
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        c2,
+        None,
+        "branch".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // base.txt was modified then deleted — net result is D
+    let base = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "base.txt")
+        .expect("base.txt should appear as deleted");
+    assert_eq!(base.diff_mode.as_deref(), Some("D"));
+
+    // feature_file.txt was added
+    let added = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "feature_file.txt")
+        .expect("feature_file.txt should appear as added");
+    assert_eq!(added.diff_mode.as_deref(), Some("A"));
+
+    // All files should have state "green" (no issues filed)
+    for f in &result.touched_files {
+        assert_eq!(f.state, "green", "file {} should be green with no issues", f.path);
+    }
+}
+
+#[test]
+fn test_branch_file_system_data_state_red_with_issue() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // Add two files on the feature branch
+    std::fs::write(dir.path().join("a.txt"), "aaa\n").unwrap();
+    std::fs::write(dir.path().join("b.txt"), "bbb\n").unwrap();
+    let c1 = git_commit(&dir, "add a.txt and b.txt");
+
+    // Review c1 with an issue on a.txt only
+    create_event(
+        &mut conn,
+        &project_id,
+        c1.clone(),
+        "commit".to_string(),
+        vec![NewIssueInput {
+            comment: "problem in a".to_string(),
+            reviews: vec![NewIssueReviewInput {
+                type_: "line".to_string(),
+                path: Some("a.txt".to_string()),
+                start: Some(1),
+                end: Some(1),
+                state: "red".to_string(),
+            }],
+        }],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
+
+    // Query branch-mode file system data
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "branch".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // a.txt should be "red" (has an issue xref)
+    let a = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "a.txt")
+        .expect("a.txt should be in touched files");
+    assert_eq!(a.state, "red");
+
+    // b.txt should be "green" (no issue xref)
+    let b = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "b.txt")
+        .expect("b.txt should be in touched files");
+    assert_eq!(b.state, "green");
+}
+
+// ---------------------------------------------------------------------------
+// Branch-mode get_review_file_data tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_branch_file_data_added_file() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    std::fs::write(dir.path().join("new.txt"), "feature content\n").unwrap();
+    let c1 = git_commit(&dir, "add new.txt on feature");
+
+    let result = get_review_file_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "branch".to_string(),
+        "new.txt".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    assert_eq!(result.content, "feature content\n");
+    // Diff is the file at main — doesn't exist, so empty
+    assert_eq!(result.diff.as_deref(), Some(""));
+}
+
+#[test]
+fn test_branch_file_data_modified_file() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    std::fs::write(dir.path().join("base.txt"), "changed on feature\n").unwrap();
+    let c1 = git_commit(&dir, "modify base.txt on feature");
+
+    let result = get_review_file_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "branch".to_string(),
+        "base.txt".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // Content is the feature version
+    assert_eq!(result.content, "changed on feature\n");
+    // Diff is the main version (original)
+    assert_eq!(result.diff.as_deref(), Some("base\n"));
+}
+
+#[test]
+fn test_branch_file_data_deleted_file() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    Command::new("git")
+        .args(["rm", "base.txt"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let c1 = git_commit(&dir, "delete base.txt on feature");
+
+    let result = get_review_file_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "branch".to_string(),
+        "base.txt".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // Content is empty (deleted at this commit)
+    assert_eq!(result.content, "");
+    // Diff is the main version
+    assert_eq!(result.diff.as_deref(), Some("base\n"));
+}
+
+#[test]
+fn test_branch_file_data_with_issue_returns_line_summary() {
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    std::fs::write(dir.path().join("code.txt"), "x\ny\nz\n").unwrap();
+    let c1 = git_commit(&dir, "add code.txt on feature");
+
+    // Review c1 with an issue
+    create_event(
+        &mut conn,
+        &project_id,
+        c1.clone(),
+        "commit".to_string(),
+        vec![NewIssueInput {
+            comment: "branch issue".to_string(),
+            reviews: vec![NewIssueReviewInput {
+                type_: "line".to_string(),
+                path: Some("code.txt".to_string()),
+                start: Some(1),
+                end: Some(3),
+                state: "yellow".to_string(),
+            }],
+        }],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
+
+    let result = get_review_file_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "branch".to_string(),
+        "code.txt".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    assert_eq!(result.content, "x\ny\nz\n");
+    assert_eq!(result.line_summary.len(), 1);
+    assert_eq!(result.line_summary[0].start, 1);
+    assert_eq!(result.line_summary[0].end, 3);
+    assert_eq!(result.line_summary[0].state, "yellow");
+    assert_eq!(result.issues.len(), 1);
+    assert_eq!(result.issues[0].comment, "branch issue");
 }
