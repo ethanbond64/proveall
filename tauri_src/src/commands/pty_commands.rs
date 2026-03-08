@@ -14,8 +14,11 @@ pub async fn pty_spawn(
 ) -> Result<u32, String> {
     let config = llm_state.config.read().unwrap().clone();
 
-    // Launch claude with no args — just an interactive session
-    let args: Vec<&str> = vec![];
+    let args: Vec<&str> = if config.args.is_empty() {
+        vec![]
+    } else {
+        config.args.split_whitespace().collect()
+    };
 
     pty_manager
         .spawn(&app, &config.command, &args, &project_path, cols, rows)

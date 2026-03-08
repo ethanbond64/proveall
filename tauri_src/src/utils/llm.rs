@@ -13,8 +13,7 @@ pub struct LlmConfig {
 pub fn default_llm_config() -> LlmConfig {
     LlmConfig {
         command: "claude".to_string(),
-        args: "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob"
-            .to_string(),
+        args: String::new(),
     }
 }
 
