@@ -160,7 +160,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
           sessionIdRef.current = null;
         });
       } catch (error) {
-        term.writeln(`\x1b[31mFailed to start Claude: ${error}\x1b[0m`);
+        term.writeln(`\x1b[31mFailed to start session: ${error}\x1b[0m`);
       }
     };
 
@@ -189,7 +189,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
       )}
       <div className="terminal-panel-header">
         <span className="terminal-panel-title">
-          Claude Terminal
+          LLM Terminal
           {isRunning && <span className="terminal-running-indicator" />}
         </span>
         <div className="terminal-panel-actions">

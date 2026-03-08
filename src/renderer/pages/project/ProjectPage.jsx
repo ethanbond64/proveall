@@ -112,7 +112,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  const handleSendToClaude = async (e, issue) => {
+  const handleSendToLlm = async (e, issue) => {
     e.stopPropagation();
     try {
       const prompt = await window.backendAPI.buildIssuePrompt(issue.id, branchContextId);
@@ -355,11 +355,11 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                     </div>
                     <button
                       className="btn-primary btn-sm"
-                      onClick={(e) => handleSendToClaude(e, issue)}
+                      onClick={(e) => handleSendToLlm(e, issue)}
                       disabled={terminalActive}
-                      title="Send to Claude"
+                      title="Send to LLM"
                     >
-                      Send to Claude
+                      Send to LLM
                     </button>
                   </div>
                 ))

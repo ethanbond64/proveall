@@ -70,7 +70,7 @@ function SettingsPage({ onBack }) {
             type="text"
             value={args}
             onChange={(e) => setArgs(e.target.value)}
-            placeholder="--print --dangerously-skip-permissions ..."
+            placeholder="Optional CLI flags"
           />
         </div>
 
