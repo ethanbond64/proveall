@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 function TerminalPanel({ projectPath, prompt, onClose }) {
@@ -13,6 +12,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   const unlistenOutput = useRef(null);
   const unlistenExit = useRef(null);
   const promptInjected = useRef(false);
+  const promptTimeout = useRef(null);
   const [isRunning, setIsRunning] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [panelHeight, setPanelHeight] = useState(300);
@@ -31,7 +31,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     }
     if (sessionIdRef.current !== null) {
       try {
-        await invoke('pty_kill', { sessionId: sessionIdRef.current });
+        await window.backendAPI.ptyKill(sessionIdRef.current);
       } catch (_) {}
       sessionIdRef.current = null;
     }
@@ -104,7 +104,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     // Handle user input -> PTY
     term.onData((data) => {
       if (sessionIdRef.current !== null) {
-        invoke('pty_write', { sessionId: sessionIdRef.current, data }).catch(console.error);
+        window.backendAPI.ptyWrite(sessionIdRef.current, data).catch(console.error);
       }
     });
 
@@ -122,7 +122,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
 
     term.onResize(({ cols, rows }) => {
       if (sessionIdRef.current !== null) {
-        invoke('pty_resize', { sessionId: sessionIdRef.current, cols, rows }).catch(console.error);
+        window.backendAPI.ptyResize(sessionIdRef.current, cols, rows).catch(console.error);
       }
     });
 
@@ -131,11 +131,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
 
       try {
         const { cols, rows } = term;
-        const sessionId = await invoke('pty_spawn', {
-          projectPath,
-          cols,
-          rows,
-        });
+        const sessionId = await window.backendAPI.ptySpawn(projectPath, cols, rows);
         sessionIdRef.current = sessionId;
         setIsRunning(true);
 
@@ -147,8 +143,7 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
             promptInjected.current = true;
             setTimeout(() => {
               if (sessionIdRef.current !== null) {
-                invoke('pty_write', { sessionId: sessionIdRef.current, data: prompt })
-                  .catch(console.error);
+                window.backendAPI.ptyWrite(sessionIdRef.current, prompt).catch(console.error);
               }
             }, 500);
           }
