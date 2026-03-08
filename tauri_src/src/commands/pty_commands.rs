@@ -42,9 +42,6 @@ pub async fn pty_resize(
 }
 
 #[tauri::command]
-pub async fn pty_kill(
-    pty_manager: State<'_, PtyManager>,
-    session_id: u32,
-) -> Result<(), String> {
+pub async fn pty_kill(pty_manager: State<'_, PtyManager>, session_id: u32) -> Result<(), String> {
     pty_manager.kill(session_id).await
 }

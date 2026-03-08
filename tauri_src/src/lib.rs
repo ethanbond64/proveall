@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
-use crate::commands::llm_commands::{build_issue_prompt, fix_issue};
+use crate::commands::llm_commands::build_issue_prompt;
 use crate::commands::project_commands::{
     create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
 };
@@ -78,7 +78,6 @@ pub fn run() {
             get_review_file_system_data,
             get_review_file_data,
             get_directory,
-            fix_issue,
             build_issue_prompt,
             get_llm_settings,
             update_llm_settings,

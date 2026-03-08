@@ -115,7 +115,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
   const handleSendToClaude = async (e, issue) => {
     e.stopPropagation();
     try {
-      const prompt = await window.backendAPI.buildIssuePrompt(project.id, issue.id, branchContextId);
+      const prompt = await window.backendAPI.buildIssuePrompt(issue.id, branchContextId);
       onOpenTerminal(project.path, prompt);
     } catch (error) {
       console.error('Failed to build prompt:', error);
