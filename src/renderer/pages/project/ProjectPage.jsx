@@ -1,12 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings, onOpenTerminal, terminalActive }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings, onOpenNewSession, onSendToExistingSession, sessions }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
+  const [sendToLlmDropdownIssueId, setSendToLlmDropdownIssueId] = useState(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!sendToLlmDropdownIssueId) return;
+    const handleClick = () => setSendToLlmDropdownIssueId(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [sendToLlmDropdownIssueId]);
 
   // Extract data from projectState
   const commits = projectState?.events || [];
@@ -112,11 +121,28 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
+  // Set of issue IDs currently being fixed in a session
+  const issueIdsInSessions = useMemo(() => {
+    return new Set(sessions.filter(s => s.issueId).map(s => s.issueId));
+  }, [sessions]);
+
   const handleSendToLlm = async (e, issue) => {
     e.stopPropagation();
     try {
       const prompt = await window.backendAPI.buildIssuePrompt(issue.id, branchContextId);
-      onOpenTerminal(project.path, prompt);
+      onOpenNewSession(project.path, prompt, issue.id);
+    } catch (error) {
+      console.error('Failed to build prompt:', error);
+      alert('Failed to build prompt: ' + error);
+    }
+  };
+
+  const handleSendToExisting = async (e, issue, sessionId) => {
+    e.stopPropagation();
+    try {
+      const prompt = await window.backendAPI.buildIssuePrompt(issue.id, branchContextId);
+      onSendToExistingSession(sessionId, prompt);
+      setSendToLlmDropdownIssueId(null);
     } catch (error) {
       console.error('Failed to build prompt:', error);
       alert('Failed to build prompt: ' + error);
@@ -346,23 +372,58 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               {isLoading ? (
                 <div className="empty-state">Loading...</div>
               ) : issues.length > 0 ? (
-                issues.map((issue) => (
-                  //  TODO index of 0 is unsafe
-                  <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
-                    <div className="issue-item-content">
-                      <div className="issue-id">#{issue.id.substring(0, 8)}</div>
-                      <div className="issue-comment">{issue.comment}</div>
+                issues.map((issue) => {
+                  const isInSession = issueIdsInSessions.has(issue.id);
+                  return (
+                    //  TODO index of 0 is unsafe
+                    <div key={issue.id} className="issue-item" style={isInSession ? { opacity: 0.5 } : undefined} onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
+                      <div className="issue-item-content">
+                        <div className="issue-id">#{issue.id.substring(0, 8)}</div>
+                        <div className="issue-comment">{issue.comment}</div>
+                        {isInSession && <span style={{ fontSize: '11px', color: '#4ec9b0', marginLeft: '8px' }}>In progress</span>}
+                      </div>
+                      <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: 0 }}>
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={(e) => handleSendToLlm(e, issue)}
+                            disabled={isInSession}
+                            title={isInSession ? 'Already being fixed in a session' : 'Send to new LLM session'}
+                            style={sessions.length > 0 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
+                          >
+                            {isInSession ? 'In Session' : 'Send to LLM'}
+                          </button>
+                          {sessions.length > 0 && !isInSession && (
+                            <button
+                              className="btn-primary btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSendToLlmDropdownIssueId(sendToLlmDropdownIssueId === issue.id ? null : issue.id);
+                              }}
+                              title="Send to existing session"
+                              style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,0.2)', padding: '4px 6px' }}
+                            >
+                              ▾
+                            </button>
+                          )}
+                        </div>
+                        {sendToLlmDropdownIssueId === issue.id && sessions.length > 0 && !isInSession && (
+                          <div className="diff-source-dropdown" style={{ right: 0, left: 'auto', minWidth: '160px' }}>
+                            {sessions.map(s => (
+                              <div
+                                key={s.id}
+                                className="diff-source-option"
+                                onClick={(e) => handleSendToExisting(e, issue, s.id)}
+                              >
+                                {s.label}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      className="btn-primary btn-sm"
-                      onClick={(e) => handleSendToLlm(e, issue)}
-                      disabled={terminalActive}
-                      title="Send to LLM"
-                    >
-                      Send to LLM
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="empty-state">No issues</div>
               )}

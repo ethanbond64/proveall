@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { listen } from '@tauri-apps/api/event';
 
-function TerminalPanel({ projectPath, prompt, onClose }) {
+function TerminalPanel({ projectPath, prompt, pendingPrompt, onClearPendingPrompt, onClose, onRunningChange }) {
   const termRef = useRef(null);
   const terminalInstance = useRef(null);
   const fitAddon = useRef(null);
@@ -14,11 +14,6 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
   const promptInjected = useRef(false);
   const promptTimeout = useRef(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [minimized, setMinimized] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(300);
-  const isDragging = useRef(false);
-  const dragStartY = useRef(0);
-  const dragStartHeight = useRef(0);
 
   const cleanup = useCallback(async () => {
     if (unlistenOutput.current) {
@@ -38,42 +33,23 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     setIsRunning(false);
   }, []);
 
-  // Drag-to-resize handlers
-  const handleDragStart = useCallback((e) => {
-    if (minimized) return;
-    e.preventDefault();
-    isDragging.current = true;
-    dragStartY.current = e.clientY;
-    dragStartHeight.current = panelHeight;
-
-    const handleDragMove = (moveEvent) => {
-      if (!isDragging.current) return;
-      const delta = dragStartY.current - moveEvent.clientY;
-      const newHeight = Math.max(100, Math.min(window.innerHeight - 80, dragStartHeight.current + delta));
-      setPanelHeight(newHeight);
-    };
-
-    const handleDragEnd = () => {
-      isDragging.current = false;
-      document.removeEventListener('mousemove', handleDragMove);
-      document.removeEventListener('mouseup', handleDragEnd);
-    };
-
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-  }, [minimized, panelHeight]);
-
-  // Re-fit terminal when minimized state changes
+  // Report running state changes to parent
   useEffect(() => {
-    if (!minimized && fitAddon.current) {
-      requestAnimationFrame(() => {
-        fitAddon.current.fit();
-        if (terminalInstance.current) {
-          terminalInstance.current.focus();
-        }
-      });
+    if (onRunningChange) {
+      onRunningChange(isRunning);
     }
-  }, [minimized]);
+  }, [isRunning, onRunningChange]);
+
+  // Handle pendingPrompt injection
+  useEffect(() => {
+    if (pendingPrompt && sessionIdRef.current !== null) {
+      invoke('pty_write', { sessionId: sessionIdRef.current, data: pendingPrompt })
+        .catch(console.error);
+      if (onClearPendingPrompt) {
+        onClearPendingPrompt();
+      }
+    }
+  }, [pendingPrompt, onClearPendingPrompt]);
 
   useEffect(() => {
     const term = new Terminal({
@@ -169,43 +145,12 @@ function TerminalPanel({ projectPath, prompt, onClose }) {
     };
   }, [projectPath, prompt]);
 
-  const handleClose = async () => {
-    await cleanup();
-    onClose();
-  };
-
   return (
     <div
-      className={`terminal-drawer ${minimized ? 'terminal-drawer-minimized' : ''}`}
-      style={minimized ? undefined : { height: panelHeight }}
-    >
-      {!minimized && (
-        <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
-      )}
-      <div className="terminal-panel-header">
-        <span className="terminal-panel-title">
-          LLM Terminal
-          {isRunning && <span className="terminal-running-indicator" />}
-        </span>
-        <div className="terminal-panel-actions">
-          <button
-            className="terminal-header-btn"
-            onClick={() => setMinimized(!minimized)}
-            title={minimized ? 'Expand' : 'Minimize'}
-          >
-            {minimized ? '▴' : '▾'}
-          </button>
-          <button className="terminal-header-btn" onClick={handleClose} title="Close terminal">
-            ×
-          </button>
-        </div>
-      </div>
-      <div
-        className="terminal-container"
-        ref={termRef}
-        style={minimized ? { display: 'none' } : undefined}
-      />
-    </div>
+      className="terminal-container"
+      ref={termRef}
+      style={{ flex: 1 }}
+    />
   );
 }
 

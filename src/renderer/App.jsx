@@ -58,16 +58,85 @@ function App() {
   // Re-check on page transitions (gated by interval)
   useEffect(() => { runUpdateCheck(); }, [currentProject, showReviewPage, showSettings, runUpdateCheck]);
 
-  // Terminal state - lives here so it persists across navigation
-  const [terminal, setTerminal] = useState(null); // { projectPath, prompt }
+  // Multi-session terminal state
+  const [sessions, setSessions] = useState([]); // [{ id, projectPath, prompt, pendingPrompt, label }]
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [sessionRunningStates, setSessionRunningStates] = useState({}); // { [id]: boolean }
+  const nextSessionId = useRef(1);
+  const [minimized, setMinimized] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(300);
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
 
-  const handleOpenTerminal = (projectPath, prompt) => {
-    setTerminal({ projectPath, prompt });
+  const handleOpenNewSession = (projectPath, prompt, issueId = null) => {
+    const id = nextSessionId.current++;
+    const label = `Session ${id}`;
+    setSessions(prev => [...prev, { id, projectPath, prompt, pendingPrompt: null, label, issueId }]);
+    setActiveSessionId(id);
+    setMinimized(false);
   };
 
-  const handleCloseTerminal = () => {
-    setTerminal(null);
+  const handleSendToExistingSession = (sessionId, prompt) => {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, pendingPrompt: prompt } : s
+    ));
+    setActiveSessionId(sessionId);
+    setMinimized(false);
   };
+
+  const handleClearPendingPrompt = (sessionId) => {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, pendingPrompt: null } : s
+    ));
+  };
+
+  const handleCloseSession = (sessionId) => {
+    setSessions(prev => {
+      const updated = prev.filter(s => s.id !== sessionId);
+      // If closing active tab, switch to last remaining
+      if (activeSessionId === sessionId && updated.length > 0) {
+        setActiveSessionId(updated[updated.length - 1].id);
+      } else if (updated.length === 0) {
+        setActiveSessionId(null);
+      }
+      return updated;
+    });
+    setSessionRunningStates(prev => {
+      const updated = { ...prev };
+      delete updated[sessionId];
+      return updated;
+    });
+  };
+
+  const handleRunningChange = (sessionId, running) => {
+    setSessionRunningStates(prev => ({ ...prev, [sessionId]: running }));
+  };
+
+  // Drag-to-resize handlers
+  const handleDragStart = useCallback((e) => {
+    if (minimized) return;
+    e.preventDefault();
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = panelHeight;
+
+    const handleDragMove = (moveEvent) => {
+      if (!isDragging.current) return;
+      const delta = dragStartY.current - moveEvent.clientY;
+      const newHeight = Math.max(100, Math.min(window.innerHeight - 80, dragStartHeight.current + delta));
+      setPanelHeight(newHeight);
+    };
+
+    const handleDragEnd = () => {
+      isDragging.current = false;
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
+    };
+
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+  }, [minimized, panelHeight]);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -143,6 +212,10 @@ function App() {
     setProjectState(null);
     setShowReviewPage(false);
     setReviewContext(null);
+    // Close all terminal sessions
+    setSessions([]);
+    setActiveSessionId(null);
+    setSessionRunningStates({});
   };
 
   const handleInstallUpdate = async () => {
@@ -191,8 +264,9 @@ function App() {
           fixingIssueId={fixingIssueId}
           setFixingIssueId={setFixingIssueId}
           onShowSettings={() => setShowSettings(true)}
-          onOpenTerminal={handleOpenTerminal}
-          terminalActive={!!terminal}
+          onOpenNewSession={handleOpenNewSession}
+          onSendToExistingSession={handleSendToExistingSession}
+          sessions={sessions}
         />
       ) : (
         <ReviewProjectPage
@@ -209,12 +283,63 @@ function App() {
       )}
 
       {/* Terminal drawer - persists across page navigation */}
-      {terminal && (
-        <TerminalPanel
-          projectPath={terminal.projectPath}
-          prompt={terminal.prompt}
-          onClose={handleCloseTerminal}
-        />
+      {sessions.length > 0 && (
+        <div
+          className={`terminal-drawer ${minimized ? 'terminal-drawer-minimized' : ''}`}
+          style={minimized ? undefined : { height: panelHeight }}
+        >
+          {!minimized && (
+            <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
+          )}
+          <div className="terminal-panel-header">
+            <div className="tab-bar" style={{ borderBottom: 'none', flex: 1 }}>
+              {sessions.map(s => (
+                <div
+                  key={s.id}
+                  className={`tab ${s.id === activeSessionId ? 'active' : ''}`}
+                  onClick={() => setActiveSessionId(s.id)}
+                >
+                  <span className="tab-name">{s.label}</span>
+                  {sessionRunningStates[s.id] && <span className="terminal-running-indicator" />}
+                  <button
+                    className="tab-close-btn"
+                    onClick={e => { e.stopPropagation(); handleCloseSession(s.id); }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="terminal-panel-actions">
+              <button
+                className="terminal-header-btn"
+                onClick={() => setMinimized(!minimized)}
+                title={minimized ? 'Expand' : 'Minimize'}
+              >
+                {minimized ? '▴' : '▾'}
+              </button>
+            </div>
+          </div>
+          {!minimized && sessions.map(session => (
+            <div
+              key={session.id}
+              style={{
+                display: session.id === activeSessionId ? 'flex' : 'none',
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              <TerminalPanel
+                projectPath={session.projectPath}
+                prompt={session.prompt}
+                pendingPrompt={session.pendingPrompt}
+                onClearPendingPrompt={() => handleClearPendingPrompt(session.id)}
+                onClose={() => handleCloseSession(session.id)}
+                onRunningChange={(running) => handleRunningChange(session.id, running)}
+              />
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Branch Context Modal */}
