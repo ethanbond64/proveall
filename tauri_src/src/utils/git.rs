@@ -6,6 +6,7 @@ use crate::error::AppError;
 
 pub(crate) struct GitOutput {
     pub stdout: String,
+    pub _stderr: String,
 }
 
 #[derive(Serialize)]
@@ -25,7 +26,10 @@ pub(crate) fn run_git(project_path: &str, args: &[&str]) -> Result<GitOutput, Ap
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
     if output.status.success() {
-        Ok(GitOutput { stdout })
+        Ok(GitOutput {
+            stdout,
+            _stderr: stderr,
+        })
     } else {
         Err(AppError::Git(stderr))
     }
