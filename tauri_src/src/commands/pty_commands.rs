@@ -4,7 +4,7 @@ use crate::utils::pty::PtyManager;
 use crate::LlmState;
 
 #[tauri::command]
-pub fn pty_spawn(
+pub async fn pty_spawn(
     app: AppHandle,
     llm_state: State<'_, LlmState>,
     pty_manager: State<'_, PtyManager>,
@@ -17,29 +17,34 @@ pub fn pty_spawn(
     // Launch claude with no args — just an interactive session
     let args: Vec<&str> = vec![];
 
-    pty_manager.spawn(&app, &config.command, &args, &project_path, cols, rows)
+    pty_manager
+        .spawn(&app, &config.command, &args, &project_path, cols, rows)
+        .await
 }
 
 #[tauri::command]
-pub fn pty_write(
+pub async fn pty_write(
     pty_manager: State<'_, PtyManager>,
     session_id: u32,
     data: String,
 ) -> Result<(), String> {
-    pty_manager.write(session_id, &data)
+    pty_manager.write(session_id, &data).await
 }
 
 #[tauri::command]
-pub fn pty_resize(
+pub async fn pty_resize(
     pty_manager: State<'_, PtyManager>,
     session_id: u32,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    pty_manager.resize(session_id, cols, rows)
+    pty_manager.resize(session_id, cols, rows).await
 }
 
 #[tauri::command]
-pub fn pty_kill(pty_manager: State<'_, PtyManager>, session_id: u32) -> Result<(), String> {
-    pty_manager.kill(session_id)
+pub async fn pty_kill(
+    pty_manager: State<'_, PtyManager>,
+    session_id: u32,
+) -> Result<(), String> {
+    pty_manager.kill(session_id).await
 }

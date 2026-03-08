@@ -1,32 +1,32 @@
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::Mutex;
-use std::thread;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
+use tokio::sync::Mutex as AsyncMutex;
 
 use base64::Engine;
 
 pub struct PtySession {
-    writer: Box<dyn Write + Send>,
-    master: Box<dyn MasterPty + Send>,
-    child: Box<dyn portable_pty::Child + Send>,
+    writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
+    master: Arc<AsyncMutex<Box<dyn MasterPty + Send>>>,
+    child: Arc<AsyncMutex<Box<dyn portable_pty::Child + Send>>>,
 }
 
 pub struct PtyManager {
-    sessions: Mutex<HashMap<u32, PtySession>>,
-    next_id: Mutex<u32>,
+    sessions: AsyncMutex<HashMap<u32, PtySession>>,
+    next_id: AsyncMutex<u32>,
 }
 
 impl PtyManager {
     pub fn new() -> Self {
         Self {
-            sessions: Mutex::new(HashMap::new()),
-            next_id: Mutex::new(1),
+            sessions: AsyncMutex::new(HashMap::new()),
+            next_id: AsyncMutex::new(1),
         }
     }
 
-    pub fn spawn(
+    pub async fn spawn(
         &self,
         app: &AppHandle,
         command: &str,
@@ -74,27 +74,28 @@ impl PtyManager {
             .map_err(|e| format!("Failed to take writer: {e}"))?;
 
         let id = {
-            let mut next = self.next_id.lock().unwrap();
+            let mut next = self.next_id.lock().await;
             let id = *next;
             *next += 1;
             id
         };
 
-        // Spawn a thread to read PTY output and emit events
+        // Offload the blocking read loop to a dedicated thread via
+        // spawn_blocking so we don't starve the tokio async runtime.
         let app_handle = app.clone();
         let session_id = id;
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             Self::read_loop(reader, app_handle, session_id);
         });
 
         {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.lock().await;
             sessions.insert(
                 id,
                 PtySession {
-                    writer,
-                    master: pair.master,
-                    child,
+                    writer: Arc::new(AsyncMutex::new(writer)),
+                    master: Arc::new(AsyncMutex::new(pair.master)),
+                    child: Arc::new(AsyncMutex::new(child)),
                 },
             );
         }
@@ -120,29 +121,39 @@ impl PtyManager {
         let _ = app.emit(&format!("pty-exit-{session_id}"), ());
     }
 
-    pub fn write(&self, id: u32, data: &str) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().unwrap();
-        let session = sessions
-            .get_mut(&id)
-            .ok_or_else(|| "PTY session not found".to_string())?;
-        session
-            .writer
-            .write_all(data.as_bytes())
-            .map_err(|e| format!("Failed to write to PTY: {e}"))?;
-        session
-            .writer
-            .flush()
-            .map_err(|e| format!("Failed to flush PTY: {e}"))?;
-        Ok(())
-    }
-
-    pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
-        let sessions = self.sessions.lock().unwrap();
+    pub async fn write(&self, id: u32, data: &str) -> Result<(), String> {
+        let sessions = self.sessions.lock().await;
         let session = sessions
             .get(&id)
             .ok_or_else(|| "PTY session not found".to_string())?;
-        session
-            .master
+        let writer = session.writer.clone();
+        drop(sessions);
+
+        let data = data.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let mut writer = writer.blocking_lock();
+            writer
+                .write_all(data.as_bytes())
+                .map_err(|e| format!("Failed to write to PTY: {e}"))?;
+            writer
+                .flush()
+                .map_err(|e| format!("Failed to flush PTY: {e}"))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Task join error: {e}"))?
+    }
+
+    pub async fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(&id)
+            .ok_or_else(|| "PTY session not found".to_string())?;
+        let master = session.master.clone();
+        drop(sessions);
+
+        let master = master.lock().await;
+        master
             .resize(PtySize {
                 rows,
                 cols,
@@ -153,10 +164,11 @@ impl PtyManager {
         Ok(())
     }
 
-    pub fn kill(&self, id: u32) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().unwrap();
-        if let Some(mut session) = sessions.remove(&id) {
-            let _ = session.child.kill();
+    pub async fn kill(&self, id: u32) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().await;
+        if let Some(session) = sessions.remove(&id) {
+            let mut child = session.child.lock().await;
+            let _ = child.kill();
         }
         Ok(())
     }
