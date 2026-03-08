@@ -63,6 +63,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [sessionRunningStates, setSessionRunningStates] = useState({}); // { [id]: boolean }
   const nextSessionId = useRef(1);
+  const [editingSessionId, setEditingSessionId] = useState(null);
   const [minimized, setMinimized] = useState(false);
   const [panelHeight, setPanelHeight] = useState(300);
   const isDragging = useRef(false);
@@ -111,6 +112,16 @@ function App() {
 
   const handleRunningChange = (sessionId, running) => {
     setSessionRunningStates(prev => ({ ...prev, [sessionId]: running }));
+  };
+
+  const handleRenameSession = (sessionId, newLabel) => {
+    const trimmed = newLabel.trim();
+    if (trimmed) {
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, label: trimmed } : s
+      ));
+    }
+    setEditingSessionId(null);
   };
 
   // Drag-to-resize handlers
@@ -299,7 +310,22 @@ function App() {
                   className={`tab ${s.id === activeSessionId ? 'active' : ''}`}
                   onClick={() => setActiveSessionId(s.id)}
                 >
-                  <span className="tab-name">{s.label}</span>
+                  {editingSessionId === s.id ? (
+                    <input
+                      className="tab-name"
+                      defaultValue={s.label}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                      onBlur={e => handleRenameSession(s.id, e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRenameSession(s.id, e.target.value);
+                        if (e.key === 'Escape') setEditingSessionId(null);
+                      }}
+                      style={{ background: 'transparent', border: '1px solid #4ec9b0', color: 'inherit', font: 'inherit', padding: '0 2px', width: '80px', outline: 'none' }}
+                    />
+                  ) : (
+                    <span className="tab-name" onDoubleClick={e => { e.stopPropagation(); setEditingSessionId(s.id); }}>{s.label}</span>
+                  )}
                   {sessionRunningStates[s.id] && <span className="terminal-running-indicator" />}
                   <button
                     className="tab-close-btn"
