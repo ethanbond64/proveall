@@ -121,9 +121,13 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  // Set of issue IDs currently being fixed in a session
-  const issueIdsInSessions = useMemo(() => {
-    return new Set(sessions.filter(s => s.issueId).map(s => s.issueId));
+  // Map of issue ID -> session label for issues currently being fixed
+  const issueSessionMap = useMemo(() => {
+    const map = new Map();
+    for (const s of sessions) {
+      if (s.issueId) map.set(s.issueId, s.label);
+    }
+    return map;
   }, [sessions]);
 
   const handleSendToLlm = async (e, issue) => {
@@ -373,14 +377,15 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                 <div className="empty-state">Loading...</div>
               ) : issues.length > 0 ? (
                 issues.map((issue) => {
-                  const isInSession = issueIdsInSessions.has(issue.id);
+                  const fixingSessionLabel = issueSessionMap.get(issue.id);
+                  const isInSession = !!fixingSessionLabel;
                   return (
                     //  TODO index of 0 is unsafe
                     <div key={issue.id} className="issue-item" style={isInSession ? { opacity: 0.5 } : undefined} onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
                       <div className="issue-item-content">
                         <div className="issue-id">#{issue.id.substring(0, 8)}</div>
                         <div className="issue-comment">{issue.comment}</div>
-                        {isInSession && <span style={{ fontSize: '11px', color: '#4ec9b0', marginLeft: '8px' }}>In progress</span>}
+                        {isInSession && <span style={{ fontSize: '11px', color: '#4ec9b0', marginLeft: '8px' }}>Fixing in {fixingSessionLabel}</span>}
                       </div>
                       <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 0 }}>
@@ -388,10 +393,10 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                             className="btn-primary btn-sm"
                             onClick={(e) => handleSendToLlm(e, issue)}
                             disabled={isInSession}
-                            title={isInSession ? 'Already being fixed in a session' : 'Send to new LLM session'}
+                            title={isInSession ? `Fixing in ${fixingSessionLabel}` : 'Send to new LLM session'}
                             style={sessions.length > 0 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
                           >
-                            {isInSession ? 'In Session' : 'Send to LLM'}
+                            {isInSession ? 'Fixing' : 'Send to LLM'}
                           </button>
                           {sessions.length > 0 && !isInSession && (
                             <button
