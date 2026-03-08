@@ -346,11 +346,11 @@ function App() {
               </button>
             </div>
           </div>
-          {!minimized && sessions.map(session => (
+          {sessions.map(session => (
             <div
               key={session.id}
               style={{
-                display: session.id === activeSessionId ? 'flex' : 'none',
+                display: !minimized && session.id === activeSessionId ? 'flex' : 'none',
                 flex: 1,
                 minHeight: 0,
               }}
