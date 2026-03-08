@@ -78,7 +78,7 @@ function SettingsPage({ onBack }) {
             type="text"
             value={llmArgs}
             onChange={(e) => setLlmArgs(e.target.value)}
-            placeholder="--print --dangerously-skip-permissions ..."
+            placeholder="Optional CLI flags"
           />
         </div>
 

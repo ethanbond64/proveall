@@ -19,7 +19,7 @@ window.backendAPI = {
   createEvent: (projectId, commit, eventType, newIssues, resolvedIssues, branchContextId) =>
     invoke('create_event', { projectId, commit, eventType, newIssues, resolvedIssues, branchContextId }),
 
-  fixIssue: (projectId, issueId, branchContextId) => invoke('fix_issue', { projectId, issueId, branchContextId }),
+  buildIssuePrompt: (issueId, branchContextId) => invoke('build_issue_prompt', { issueId, branchContextId }),
 
   getDirectory: (projectId, directoryPath) => invoke('get_directory', { projectId, directoryPath }),
   readDirectory: (path) => invoke('get_directory', { projectId: 1, directoryPath: path }), // TODO Fallback with dummy projectId
@@ -29,4 +29,9 @@ window.backendAPI = {
   getSettings: () => invoke('get_settings'),
   setSettings: (settings) => invoke('set_settings', { settings }),
   resetSettings: () => invoke('reset_settings'),
+
+  ptySpawn: (projectPath, cols, rows) => invoke('pty_spawn', { projectPath, cols, rows }),
+  ptyWrite: (sessionId, data) => invoke('pty_write', { sessionId, data }),
+  ptyResize: (sessionId, cols, rows) => invoke('pty_resize', { sessionId, cols, rows }),
+  ptyKill: (sessionId) => invoke('pty_kill', { sessionId }),
 };

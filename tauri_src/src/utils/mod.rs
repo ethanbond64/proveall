@@ -1,6 +1,6 @@
 pub mod git;
 pub mod hash_id;
-pub mod llm;
+pub mod pty;
 pub mod settings;
 
 /// macOS GUI apps get a minimal PATH that excludes user-installed tools.

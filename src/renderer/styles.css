@@ -2944,3 +2944,90 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Terminal Drawer */
+.terminal-drawer {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #1e1e1e;
+  border-top: 2px solid #007acc;
+}
+
+.terminal-drawer-minimized {
+  height: auto !important;
+}
+
+.terminal-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.terminal-resize-handle:hover {
+  background: #007acc;
+}
+
+.terminal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.terminal-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cccccc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.terminal-running-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ec9b0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.terminal-header-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.terminal-header-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.terminal-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+  min-height: 0;
+}

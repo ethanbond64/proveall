@@ -3,14 +3,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::utils::llm::LlmConfig;
 
 fn default_llm_command() -> String {
     "claude".to_string()
 }
 
 fn default_llm_args() -> String {
-    "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob".to_string()
+    String::new()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,15 +27,6 @@ pub fn default_settings() -> AppSettings {
         llm_command: default_llm_command(),
         llm_args: default_llm_args(),
         auto_update: false,
-    }
-}
-
-impl AppSettings {
-    pub fn to_llm_config(&self) -> LlmConfig {
-        LlmConfig {
-            command: self.llm_command.clone(),
-            args: self.llm_args.clone(),
-        }
     }
 }
 
