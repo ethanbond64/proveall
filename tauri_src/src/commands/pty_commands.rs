@@ -1,27 +1,34 @@
 use tauri::{AppHandle, State};
 
 use crate::utils::pty::PtyManager;
-use crate::LlmState;
+use crate::SettingsState;
 
 #[tauri::command]
 pub async fn pty_spawn(
     app: AppHandle,
-    llm_state: State<'_, LlmState>,
+    settings_state: State<'_, SettingsState>,
     pty_manager: State<'_, PtyManager>,
     project_path: String,
     cols: u16,
     rows: u16,
 ) -> Result<u32, String> {
-    let config = llm_state.config.read().unwrap().clone();
+    let settings = settings_state.settings.read().unwrap().clone();
 
-    let args: Vec<&str> = if config.args.is_empty() {
+    let args: Vec<&str> = if settings.llm_args.is_empty() {
         vec![]
     } else {
-        config.args.split_whitespace().collect()
+        settings.llm_args.split_whitespace().collect()
     };
 
     pty_manager
-        .spawn(&app, &config.command, &args, &project_path, cols, rows)
+        .spawn(
+            &app,
+            &settings.llm_command,
+            &args,
+            &project_path,
+            cols,
+            rows,
+        )
         .await
 }
 

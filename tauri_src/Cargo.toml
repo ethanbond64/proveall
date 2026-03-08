@@ -1,6 +1,6 @@
 [package]
 name = "proveall"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 
 [lib]
@@ -28,3 +28,6 @@ tokio = { version = "1", features = ["sync", "rt"] }
 
 [dev-dependencies]
 tempfile = "3.26.0"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"

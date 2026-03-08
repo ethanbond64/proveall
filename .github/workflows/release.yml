@@ -64,8 +64,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  build-tauri:
-    name: Build Tauri App for macOS
+  build-and-release:
+    name: Build and Release
     needs: check-version
     if: needs.check-version.outputs.should_release == 'true'
     timeout-minutes: 20
@@ -76,7 +76,6 @@ jobs:
         include:
           - args: '--target aarch64-apple-darwin'
             rust_target: 'aarch64-apple-darwin'
-            arch: 'silicon'
 
     runs-on: macos-latest
     steps:
@@ -159,59 +158,15 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/private_keys/AuthKey.p8
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
           projectPath: tauri_src
+          tagName: v${{ needs.check-version.outputs.version }}
+          releaseName: v${{ needs.check-version.outputs.version }}
+          releaseBody: ${{ needs.check-version.outputs.changelog }}
 
       - name: Clean up Apple API key
         if: always()
         run: rm -rf "${{ runner.temp }}/private_keys"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-${{ matrix.rust_target }}
-          path: |
-            tauri_src/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
-            tauri_src/target/${{ matrix.rust_target }}/release/bundle/macos/*.app.tar.gz
-          if-no-files-found: error
-
-  create-release:
-    name: Create GitHub Release
-    needs: [check-version, build-tauri]
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir release-assets
-
-          # Find and move macOS Apple Silicon artifacts with proper naming
-          if [ -d "artifacts/macos-aarch64-apple-darwin" ]; then
-            DMG=$(find artifacts/macos-aarch64-apple-darwin -name "*.dmg" -type f | head -1)
-            TAR=$(find artifacts/macos-aarch64-apple-darwin -name "*.app.tar.gz" -type f | head -1)
-
-            [ -n "$DMG" ] && mv "$DMG" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.dmg"
-            [ -n "$TAR" ] && mv "$TAR" "release-assets/ProveAll_${{ needs.check-version.outputs.version }}_aarch64.app.tar.gz"
-          fi
-
-          ls -la release-assets/
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.check-version.outputs.version }}
-          CHANGELOG: ${{ needs.check-version.outputs.changelog }}
-        run: |
-          # Create release with all assets
-          gh release create "v$VERSION" \
-            --title "v$VERSION" \
-            --notes "$CHANGELOG" \
-            release-assets/*

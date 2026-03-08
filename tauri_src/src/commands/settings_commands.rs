@@ -1,38 +1,30 @@
 use tauri::State;
 
-use crate::utils::llm::{default_llm_config, save_settings, LlmConfig};
-use crate::LlmState;
+use crate::utils::settings::{default_settings, save_settings, AppSettings};
+use crate::SettingsState;
 
 #[tauri::command]
-pub fn get_llm_settings(llm_state: State<'_, LlmState>) -> Result<LlmConfig, String> {
-    let config = llm_state.config.read().unwrap().clone();
-    Ok(config)
+pub fn get_settings(state: State<'_, SettingsState>) -> Result<AppSettings, String> {
+    let settings = state.settings.read().unwrap().clone();
+    Ok(settings)
 }
 
 #[tauri::command]
-pub fn update_llm_settings(
-    llm_state: State<'_, LlmState>,
-    command: String,
-    args: String,
-) -> Result<(), String> {
-    let new_config = LlmConfig { command, args };
+pub fn set_settings(state: State<'_, SettingsState>, settings: AppSettings) -> Result<(), String> {
+    save_settings(&state.app_data_dir, &settings).map_err(String::from)?;
 
-    // Persist to disk
-    save_settings(&llm_state.app_data_dir, &new_config).map_err(String::from)?;
-
-    // Update in-memory config
-    let mut config = llm_state.config.write().unwrap();
-    *config = new_config;
+    let mut current = state.settings.write().unwrap();
+    *current = settings;
     Ok(())
 }
 
 #[tauri::command]
-pub fn reset_llm_settings(llm_state: State<'_, LlmState>) -> Result<LlmConfig, String> {
-    let defaults = default_llm_config();
+pub fn reset_settings(state: State<'_, SettingsState>) -> Result<AppSettings, String> {
+    let defaults = default_settings();
 
-    save_settings(&llm_state.app_data_dir, &defaults).map_err(String::from)?;
+    save_settings(&state.app_data_dir, &defaults).map_err(String::from)?;
 
-    let mut config = llm_state.config.write().unwrap();
-    *config = defaults.clone();
+    let mut current = state.settings.write().unwrap();
+    *current = defaults.clone();
     Ok(defaults)
 }

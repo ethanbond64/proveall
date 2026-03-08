@@ -26,9 +26,9 @@ window.backendAPI = {
 
   openDirectory: () => open({ directory: true, multiple: false }),
 
-  getLlmSettings: () => invoke('get_llm_settings'),
-  updateLlmSettings: (command, args) => invoke('update_llm_settings', { command, args }),
-  resetLlmSettings: () => invoke('reset_llm_settings'),
+  getSettings: () => invoke('get_settings'),
+  setSettings: (settings) => invoke('set_settings', { settings }),
+  resetSettings: () => invoke('reset_settings'),
 
   ptySpawn: (projectPath, cols, rows) => invoke('pty_spawn', { projectPath, cols, rows }),
   ptyWrite: (sessionId, data) => invoke('pty_write', { sessionId, data }),

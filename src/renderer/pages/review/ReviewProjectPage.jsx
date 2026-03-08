@@ -69,8 +69,8 @@ function ReviewProjectPageInner({
       {/* Project Page Header - copied exact structure */}
       <div className="project-page-header">
         {onNavigateBack && (
-          <button className="back-button" onClick={onNavigateBack} title="Back to Project Page">
-            ‹ Back
+          <button className="header-icon-btn" onClick={onNavigateBack} title="Back to Project Page">
+            ‹
           </button>
         )}
         {vcsInfo?.isVCS && (
