@@ -40,8 +40,9 @@ pub fn gather_issue_context(
     })
 }
 
-/// Build the prompt string from issue context.
-pub fn build_prompt(ctx: &IssueContext) -> String {
+/// Build the prompt string from issue context and a user-configurable template.
+/// The template should contain `{issue}` which gets replaced with the issue details.
+pub fn build_prompt(ctx: &IssueContext, template: &str) -> String {
     let mut affected_files = String::new();
     for composite in &ctx.composites {
         affected_files.push_str(&format!("### {}\n", composite.relative_file_path));
@@ -57,14 +58,10 @@ pub fn build_prompt(ctx: &IssueContext) -> String {
         affected_files.push('\n');
     }
 
-    format!(
-        "Fix the following code review issue.\n\n\
-         ## Issue\n\
-         {}\n\n\
-         ## Affected files\n\
-         {}\
-         Fix the issue by editing the affected files. Only make changes necessary to address the issue.\n\n\
-         After making the changes, stage and commit them with a commit message starting with \"fix: \".",
+    let issue_block = format!(
+        "## Issue\n{}\n\n## Affected files\n{}",
         ctx.issue_comment, affected_files
-    )
+    );
+
+    template.replace("{issue}", &issue_block)
 }
