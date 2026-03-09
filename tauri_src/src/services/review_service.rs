@@ -128,6 +128,7 @@ fn build_commit_touched_files(
             path: f.path,
             diff_mode: Some(f.status),
             state: "red".to_string(),
+            merge_only: false,
         })
         .collect())
 }
@@ -184,6 +185,7 @@ fn build_branch_touched_files(
                 path: f.path,
                 diff_mode: Some(f.status),
                 state,
+                merge_only: false,
             }
         })
         .collect())
@@ -205,6 +207,7 @@ fn build_merge_review_touched_files(
             path: file_path.to_string(),
             diff_mode: Some("M".to_string()),
             state: "red".to_string(),
+            merge_only: false,
         })
         .collect())
 }
