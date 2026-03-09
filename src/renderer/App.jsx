@@ -4,7 +4,7 @@ import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
 import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
-import TerminalPanel from './components/TerminalPanel';
+import TerminalDrawer from './components/TerminalDrawer';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import { checkForUpdate } from './utils/updater';
 import './styles.css';
@@ -58,96 +58,9 @@ function App() {
   // Re-check on page transitions (gated by interval)
   useEffect(() => { runUpdateCheck(); }, [currentProject, showReviewPage, showSettings, runUpdateCheck]);
 
-  // Multi-session terminal state
-  const [sessions, setSessions] = useState([]); // [{ id, projectPath, prompt, pendingPrompt, label }]
-  const [activeSessionId, setActiveSessionId] = useState(null);
-  const [sessionRunningStates, setSessionRunningStates] = useState({}); // { [id]: boolean }
-  const nextSessionId = useRef(1);
-  const [editingSessionId, setEditingSessionId] = useState(null);
-  const [minimized, setMinimized] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(300);
-  const isDragging = useRef(false);
-  const dragStartY = useRef(0);
-  const dragStartHeight = useRef(0);
-
-  const handleOpenNewSession = (projectPath, prompt, issueId = null, command = null, args = null) => {
-    const id = nextSessionId.current++;
-    const label = `Session ${id}`;
-    setSessions(prev => [...prev, { id, projectPath, prompt, pendingPrompt: null, label, issueId, command, args }]);
-    setActiveSessionId(id);
-    setMinimized(false);
-  };
-
-  const handleSendToExistingSession = (sessionId, prompt) => {
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, pendingPrompt: prompt } : s
-    ));
-    setActiveSessionId(sessionId);
-    setMinimized(false);
-  };
-
-  const handleClearPendingPrompt = (sessionId) => {
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, pendingPrompt: null } : s
-    ));
-  };
-
-  const handleCloseSession = (sessionId) => {
-    setSessions(prev => {
-      const updated = prev.filter(s => s.id !== sessionId);
-      // If closing active tab, switch to last remaining
-      if (activeSessionId === sessionId && updated.length > 0) {
-        setActiveSessionId(updated[updated.length - 1].id);
-      } else if (updated.length === 0) {
-        setActiveSessionId(null);
-      }
-      return updated;
-    });
-    setSessionRunningStates(prev => {
-      const updated = { ...prev };
-      delete updated[sessionId];
-      return updated;
-    });
-  };
-
-  const handleRunningChange = (sessionId, running) => {
-    setSessionRunningStates(prev => ({ ...prev, [sessionId]: running }));
-  };
-
-  const handleRenameSession = (sessionId, newLabel) => {
-    const trimmed = newLabel.trim();
-    if (trimmed) {
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? { ...s, label: trimmed } : s
-      ));
-    }
-    setEditingSessionId(null);
-  };
-
-  // Drag-to-resize handlers
-  const handleDragStart = useCallback((e) => {
-    if (minimized) return;
-    e.preventDefault();
-    isDragging.current = true;
-    dragStartY.current = e.clientY;
-    dragStartHeight.current = panelHeight;
-
-    const handleDragMove = (moveEvent) => {
-      if (!isDragging.current) return;
-      const delta = dragStartY.current - moveEvent.clientY;
-      const newHeight = Math.max(100, Math.min(window.innerHeight - 80, dragStartHeight.current + delta));
-      setPanelHeight(newHeight);
-    };
-
-    const handleDragEnd = () => {
-      isDragging.current = false;
-      document.removeEventListener('mousemove', handleDragMove);
-      document.removeEventListener('mouseup', handleDragEnd);
-    };
-
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-  }, [minimized, panelHeight]);
+  // Terminal drawer ref + sessions mirror for sibling components
+  const terminalRef = useRef(null);
+  const [sessions, setSessions] = useState([]);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -223,10 +136,7 @@ function App() {
     setProjectState(null);
     setShowReviewPage(false);
     setReviewContext(null);
-    // Close all terminal sessions
-    setSessions([]);
-    setActiveSessionId(null);
-    setSessionRunningStates({});
+    terminalRef.current?.resetAll();
   };
 
   const handleInstallUpdate = async () => {
@@ -275,8 +185,8 @@ function App() {
           fixingIssueId={fixingIssueId}
           setFixingIssueId={setFixingIssueId}
           onShowSettings={() => setShowSettings(true)}
-          onOpenNewSession={handleOpenNewSession}
-          onSendToExistingSession={handleSendToExistingSession}
+          onOpenNewSession={(...a) => terminalRef.current?.openNewSession(...a)}
+          onSendToExistingSession={(...a) => terminalRef.current?.sendToExistingSession(...a)}
           sessions={sessions}
         />
       ) : (
@@ -294,81 +204,7 @@ function App() {
       )}
 
       {/* Terminal drawer - persists across page navigation */}
-      {sessions.length > 0 && (
-        <div
-          className={`terminal-drawer ${minimized ? 'terminal-drawer-minimized' : ''}`}
-          style={minimized ? undefined : { height: panelHeight }}
-        >
-          {!minimized && (
-            <div className="terminal-resize-handle" onMouseDown={handleDragStart} />
-          )}
-          <div className="terminal-panel-header">
-            <div className="tab-bar" style={{ borderBottom: 'none', flex: 1 }}>
-              {sessions.map(s => (
-                <div
-                  key={s.id}
-                  className={`tab ${s.id === activeSessionId ? 'active' : ''}`}
-                  onClick={() => setActiveSessionId(s.id)}
-                >
-                  {editingSessionId === s.id ? (
-                    <input
-                      className="tab-name"
-                      defaultValue={s.label}
-                      autoFocus
-                      onClick={e => e.stopPropagation()}
-                      onBlur={e => handleRenameSession(s.id, e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleRenameSession(s.id, e.target.value);
-                        if (e.key === 'Escape') setEditingSessionId(null);
-                      }}
-                      style={{ background: 'transparent', border: '1px solid #4ec9b0', color: 'inherit', font: 'inherit', padding: '0 2px', width: '80px', outline: 'none' }}
-                    />
-                  ) : (
-                    <span className="tab-name" onDoubleClick={e => { e.stopPropagation(); setEditingSessionId(s.id); }}>{s.label}</span>
-                  )}
-                  {sessionRunningStates[s.id] && <span className="terminal-running-indicator" />}
-                  <button
-                    className="tab-close-btn"
-                    onClick={e => { e.stopPropagation(); handleCloseSession(s.id); }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="terminal-panel-actions">
-              <button
-                className="terminal-header-btn"
-                onClick={() => setMinimized(!minimized)}
-                title={minimized ? 'Expand' : 'Minimize'}
-              >
-                {minimized ? '▴' : '▾'}
-              </button>
-            </div>
-          </div>
-          {sessions.map(session => (
-            <div
-              key={session.id}
-              style={{
-                display: !minimized && session.id === activeSessionId ? 'flex' : 'none',
-                flex: 1,
-                minHeight: 0,
-              }}
-            >
-              <TerminalPanel
-                projectPath={session.projectPath}
-                prompt={session.prompt}
-                pendingPrompt={session.pendingPrompt}
-                onClearPendingPrompt={() => handleClearPendingPrompt(session.id)}
-                onClose={() => handleCloseSession(session.id)}
-                onRunningChange={(running) => handleRunningChange(session.id, running)}
-                command={session.command}
-                args={session.args}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <TerminalDrawer ref={terminalRef} onSessionsChange={setSessions} />
 
       {/* Branch Context Modal */}
       {showBranchModal && currentBranch && pendingProjectOpen && (

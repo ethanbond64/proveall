@@ -12,12 +12,10 @@ pub async fn pty_spawn(
     command: String,
     args: String,
 ) -> Result<u32, String> {
-    let args_str = args;
-
-    let args: Vec<&str> = if args_str.is_empty() {
+    let args: Vec<&str> = if args.is_empty() {
         vec![]
     } else {
-        args_str.split_whitespace().collect()
+        args.split_whitespace().collect()
     };
 
     pty_manager

@@ -63,5 +63,5 @@ pub fn build_prompt(ctx: &IssueContext, template: &str) -> String {
         ctx.issue_comment, affected_files
     );
 
-    template.replace("{issue}", &issue_block)
+    template.replace("{issue}", issue_block.trim_end())
 }
