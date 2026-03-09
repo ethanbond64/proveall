@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Automatic issue resolution now spawns a terminal so the prompt can be reviewed and edited before sending, and LLM progress can be monitored.
+  - Issues can be sent to an existing session or spawn a new one.
+
 ## [0.5.0] - 2026-03-06
 
 ### Added
