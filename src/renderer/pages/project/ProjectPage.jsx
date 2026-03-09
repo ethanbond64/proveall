@@ -127,13 +127,16 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     if (clickedIndex < 0 || clickedIndex > oldestUnreviewedIndex) return;
     if (event.id !== null || event.event_type !== 'commit') return;
 
+    // Conflicted merges: only use MERGE_REVIEW_MODE when reviewing as a single
+    // commit (i.e. it's the oldest unreviewed). Otherwise treat as bulk target.
     if (isConflictedMerge(event)) {
-      onNavigateToReview(event.commit, MERGE_REVIEW_MODE);
-      return;
-    }
-
-    // If this is the next-to-review commit, navigate directly to review
-    if (event.commit === oldestUnreviewedCommit.commit) {
+      if (event.commit === oldestUnreviewedCommit.commit) {
+        onNavigateToReview(event.commit, MERGE_REVIEW_MODE);
+        return;
+      }
+      // Fall through to set as selectedTargetCommit for bulk range
+    } else if (event.commit === oldestUnreviewedCommit.commit) {
+      // If this is the next-to-review commit, navigate directly to review
       onNavigateToReview(event.commit, COMMIT_REVIEW_MODE);
       return;
     }
