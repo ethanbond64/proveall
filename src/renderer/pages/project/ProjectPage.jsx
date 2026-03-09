@@ -3,7 +3,7 @@ import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings, onOpenNewSession, onSendToExistingSession, sessions }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, onShowSettings, onOpenNewSession, onSendToExistingSession, sessions }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
@@ -400,17 +400,17 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                       <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 0 }}>
                           <button
-                            className="btn-primary btn-sm"
+                            className="header-icon-btn"
                             onClick={(e) => openSendModal(e, issue)}
                             disabled={isInSession}
-                            title={isInSession ? `Fixing in ${fixingSessionLabel}` : 'Send to new LLM session'}
+                            title={isInSession ? `Fixing in ${fixingSessionLabel}` : 'Send to LLM'}
                             style={sessions.length > 0 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
                           >
-                            {isInSession ? 'Fixing' : 'Send to LLM'}
+                            ⚒
                           </button>
                           {sessions.length > 0 && !isInSession && (
                             <button
-                              className="btn-primary btn-sm"
+                              className="header-icon-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSendToLlmDropdownIssueId(sendToLlmDropdownIssueId === issue.id ? null : issue.id);

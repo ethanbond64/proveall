@@ -20,7 +20,6 @@ function App() {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [currentBranch, setCurrentBranch] = useState(null);
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
-  const [fixingIssueId, setFixingIssueId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -182,11 +181,9 @@ function App() {
           branchContextId={branchContextId}
           onNavigateToReview={handleNavigateToReview}
           onNavigateBack={handleNavigateToMenu}
-          fixingIssueId={fixingIssueId}
-          setFixingIssueId={setFixingIssueId}
           onShowSettings={() => setShowSettings(true)}
-          onOpenNewSession={(...a) => terminalRef.current?.openNewSession(...a)}
-          onSendToExistingSession={(...a) => terminalRef.current?.sendToExistingSession(...a)}
+          onOpenNewSession={(projectPath, prompt, issueId, command, args) => terminalRef.current?.openNewSession(projectPath, prompt, issueId, command, args)}
+          onSendToExistingSession={(sessionId, prompt) => terminalRef.current?.sendToExistingSession(sessionId, prompt)}
           sessions={sessions}
         />
       ) : (
