@@ -381,22 +381,26 @@ fn test_file_data_with_issue_returns_line_summary() {
 
 #[test]
 fn test_commit_bulk_merge_only_files_separated() {
-    // Bulk review spanning: c1 (normal) + merge (base merge with merge-only file)
-    // merge-only files should have merge_only: true
+    // Review c1, then bulk review c2 + merge.
+    // Files only from the base-branch merge should have merge_only: true.
     let mut conn = test_conn();
-    let (dir, base_hash) = setup_git_repo();
+    let (dir, _base_hash) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
-    // Review the fork-point (base_hash) so head_event_id is set
-    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
-
     // c1 on feature: add feature.txt
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
     let c1 = git_commit(&dir, "add feature.txt");
+
+    // Review c1 so head_event_id is set to a point before main advanced
+    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+
+    // c2 on feature: add another file
+    std::fs::write(dir.path().join("feature2.txt"), "feature2\n").unwrap();
+    let c2 = git_commit(&dir, "add feature2.txt");
 
     // Make a change on main (different file) and merge into feature
     git_checkout(&dir, "main");
@@ -405,7 +409,7 @@ fn test_commit_bulk_merge_only_files_separated() {
     git_checkout(&dir, "feature");
     let merge_hash = git_merge(&dir, "main");
 
-    // Bulk review from base_hash..merge_hash covers c1 + merge
+    // Bulk review from c1..merge_hash covers c2 + merge
     let result = get_review_file_system_data(
         &mut conn,
         &project_id,
@@ -416,10 +420,10 @@ fn test_commit_bulk_merge_only_files_separated() {
     )
     .unwrap();
 
-    // feature.txt touched by c1 (normal commit) → merge_only: false
-    let feature_file = result.touched_files.iter().find(|f| f.path == "feature.txt")
-        .expect("feature.txt should be in touched files");
-    assert!(!feature_file.merge_only, "feature.txt is from a normal commit");
+    // feature2.txt touched by c2 (normal commit) → merge_only: false
+    let feature2_file = result.touched_files.iter().find(|f| f.path == "feature2.txt")
+        .expect("feature2.txt should be in touched files");
+    assert!(!feature2_file.merge_only, "feature2.txt is from a normal commit");
 
     // main_only.txt only touched by the merge → merge_only: true
     let main_file = result.touched_files.iter().find(|f| f.path == "main_only.txt")
@@ -431,14 +435,12 @@ fn test_commit_bulk_merge_only_files_separated() {
 fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
     // A file touched by both a normal commit and a merge should NOT be merge_only
     let mut conn = test_conn();
-    let (dir, base_hash) = setup_git_repo();
+    let (dir, _base_hash) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
-
-    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
 
     // c1 on feature: modify base.txt
     std::fs::write(dir.path().join("base.txt"), "feature change\n").unwrap();
@@ -472,14 +474,12 @@ fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
 fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
     // Conflict resolution files from a conflicted merge should NOT be merge_only
     let mut conn = test_conn();
-    let (dir, base_hash) = setup_git_repo();
+    let (dir, _base_hash) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
-
-    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
 
     // c1 on feature: add a separate file
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
@@ -542,18 +542,48 @@ fn test_commit_single_no_merge_all_files_normal() {
 }
 
 #[test]
-fn test_commit_non_base_merge_files_not_merge_only() {
-    // Non-base merges (e.g. merging a feature branch into another feature branch)
-    // should be treated as normal commits — their files should NOT be merge_only
+fn test_commit_first_on_feature_branch_no_merge_only() {
+    // First commit on a feature branch with no head_event_id — base_ref falls
+    // back to the base branch name. No files should be merge_only.
     let mut conn = test_conn();
-    let (dir, base_hash) = setup_git_repo();
+    let (dir, _base_hash) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
-    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    // First commit on feature — no prior reviews, no head_event_id
+    std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
+    let c1 = git_commit(&dir, "add feature.txt on feature");
+
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    assert!(!result.touched_files.is_empty(), "should have touched files");
+    for f in &result.touched_files {
+        assert!(!f.merge_only, "file {} should not be merge_only on first feature commit", f.path);
+    }
+}
+
+#[test]
+fn test_commit_non_base_merge_files_not_merge_only() {
+    // Non-base merges (e.g. merging a feature branch into another feature branch)
+    // should be treated as normal commits — their files should NOT be merge_only
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Make a commit on feature so "other" branch diverges from feature, not main
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();

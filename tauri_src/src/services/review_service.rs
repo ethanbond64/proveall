@@ -122,13 +122,17 @@ fn build_commit_touched_files(
 ) -> Result<Vec<TouchedFile>, AppError> {
     let diff_files = diff_changed_files(project_path, &[base_ref, commit])?;
 
-    // Enumerate commits in the range to determine which files come only from merges.
+    // Enumerate first-parent commits in the range to find base-branch merges.
+    // Only files exclusively introduced by base-branch merges (and not conflict
+    // resolutions) are marked merge_only. Everything else stays normal.
     let range = format!("{}..{}", base_ref, commit);
     let commits = git::log(project_path, &["--first-parent", &range]).unwrap_or_default();
 
-    // Collect files that appear in non-merge commits or as conflict files in merges.
-    // These are "normal" files that the user should review.
-    let mut normal_files: HashSet<String> = HashSet::new();
+    // Collect files that were introduced only via base-branch merges.
+    // A file is merge_only if it appears in a base-merge diff but NOT in any
+    // non-merge commit diff and NOT as a conflict resolution file.
+    let mut merge_introduced_files: HashSet<String> = HashSet::new();
+    let mut non_merge_files: HashSet<String> = HashSet::new();
 
     for c in &commits {
         let is_merge = c.parents.len() > 1;
@@ -136,26 +140,27 @@ fn build_commit_touched_files(
             && git::is_base_branch_merge(project_path, &c.parents, base_branch);
 
         if is_base_merge {
-            // Only conflict resolution files from base merges count as normal
+            // Conflict resolution files are NOT merge_only — add to non_merge_files
             if let Ok(cc_output) = git::diff_tree_cc_name_only(project_path, &c.hash) {
                 for line in cc_output.lines().filter(|l| !l.is_empty()) {
-                    normal_files.insert(line.to_string());
+                    non_merge_files.insert(line.to_string());
                 }
             }
-        } else {
-            // Non-merge or non-base-merge: all changed files are normal
-            // Use diff against parent to get this commit's files
+
+            // All files changed by this merge (diff first-parent vs merge commit)
             if let Some(parent) = c.parents.first() {
                 if let Ok(files) = diff_changed_files(project_path, &[parent, &c.hash]) {
                     for f in files {
-                        normal_files.insert(f.path);
+                        merge_introduced_files.insert(f.path);
                     }
                 }
-            } else {
-                // Root commit — diff against empty tree
-                if let Ok(files) = diff_changed_files(project_path, &[&c.hash]) {
+            }
+        } else {
+            // Non-merge commit: all its files are non-merge
+            if let Some(parent) = c.parents.first() {
+                if let Ok(files) = diff_changed_files(project_path, &[parent, &c.hash]) {
                     for f in files {
-                        normal_files.insert(f.path);
+                        non_merge_files.insert(f.path);
                     }
                 }
             }
@@ -165,7 +170,8 @@ fn build_commit_touched_files(
     Ok(diff_files
         .into_iter()
         .map(|f| {
-            let merge_only = !normal_files.contains(&f.path);
+            let merge_only = merge_introduced_files.contains(&f.path)
+                && !non_merge_files.contains(&f.path);
             TouchedFile {
                 name: extract_file_name(&f.path),
                 path: f.path,
