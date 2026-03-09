@@ -3,13 +3,15 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
-use crate::commands::llm_commands::fix_issue;
+use crate::commands::llm_commands::build_issue_prompt;
 use crate::commands::project_commands::{
     create_branch_context, delete_project, fetch_projects, get_current_branch, get_project_state,
     open_project,
 };
+use crate::commands::pty_commands::{pty_kill, pty_resize, pty_spawn, pty_write};
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
 use crate::commands::settings_commands::{get_settings, reset_settings, set_settings};
+use crate::utils::pty::PtyManager;
 use crate::utils::settings::{load_settings, AppSettings};
 use diesel::sqlite::SqliteConnection;
 
@@ -67,6 +69,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(conn)))
         .manage(settings_state)
+        .manage(PtyManager::new())
         .invoke_handler(tauri::generate_handler![
             // Project menu APIs
             fetch_projects,
@@ -82,11 +85,16 @@ pub fn run() {
             get_review_file_data,
             get_directory,
             // Child process API
-            fix_issue,
+            build_issue_prompt,
             // Settings API
             get_settings,
             set_settings,
             reset_settings,
+            // Terminal API
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

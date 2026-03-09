@@ -3,14 +3,21 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::utils::llm::LlmConfig;
 
 fn default_llm_command() -> String {
     "claude".to_string()
 }
 
 fn default_llm_args() -> String {
-    "--print --dangerously-skip-permissions --allowedTools Edit,Read,Write,Grep,Glob".to_string()
+    String::new()
+}
+
+fn default_llm_prompt_template() -> String {
+    "Fix the following code review issue.\n\n\
+     {issue}\n\n\
+     Fix the issue by editing the affected files. Only make changes necessary to address the issue.\n\n\
+     After making the changes, stage and commit them with a commit message starting with \"fix: \"."
+        .to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,6 +26,8 @@ pub struct AppSettings {
     pub llm_command: String,
     #[serde(default = "default_llm_args", alias = "args")]
     pub llm_args: String,
+    #[serde(default = "default_llm_prompt_template")]
+    pub llm_prompt_template: String,
     #[serde(default)]
     pub auto_update: bool,
 }
@@ -27,16 +36,8 @@ pub fn default_settings() -> AppSettings {
     AppSettings {
         llm_command: default_llm_command(),
         llm_args: default_llm_args(),
+        llm_prompt_template: default_llm_prompt_template(),
         auto_update: false,
-    }
-}
-
-impl AppSettings {
-    pub fn to_llm_config(&self) -> LlmConfig {
-        LlmConfig {
-            command: self.llm_command.clone(),
-            args: self.llm_args.clone(),
-        }
     }
 }
 

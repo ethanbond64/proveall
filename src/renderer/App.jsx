@@ -4,6 +4,7 @@ import ProjectPage from './pages/project/ProjectPage';
 import ReviewProjectPage from './pages/review/ReviewProjectPage'; // New implementation ready for Phase 2
 import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
+import TerminalDrawer from './components/TerminalDrawer';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import { checkForUpdate } from './utils/updater';
 import './styles.css';
@@ -19,7 +20,6 @@ function App() {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [currentBranch, setCurrentBranch] = useState(null);
   const [pendingProjectOpen, setPendingProjectOpen] = useState(null);
-  const [fixingIssueId, setFixingIssueId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -56,6 +56,10 @@ function App() {
 
   // Re-check on page transitions (gated by interval)
   useEffect(() => { runUpdateCheck(); }, [currentProject, showReviewPage, showSettings, runUpdateCheck]);
+
+  // Terminal drawer ref + sessions mirror for sibling components
+  const terminalRef = useRef(null);
+  const [sessions, setSessions] = useState([]);
 
   // Simplified project opening - just set the project
   const openProject = async (project) => {
@@ -131,6 +135,7 @@ function App() {
     setProjectState(null);
     setShowReviewPage(false);
     setReviewContext(null);
+    terminalRef.current?.resetAll();
   };
 
   const handleInstallUpdate = async () => {
@@ -176,9 +181,10 @@ function App() {
           branchContextId={branchContextId}
           onNavigateToReview={handleNavigateToReview}
           onNavigateBack={handleNavigateToMenu}
-          fixingIssueId={fixingIssueId}
-          setFixingIssueId={setFixingIssueId}
           onShowSettings={() => setShowSettings(true)}
+          onOpenNewSession={(projectPath, prompt, issueId, command, args) => terminalRef.current?.openNewSession(projectPath, prompt, issueId, command, args)}
+          onSendToExistingSession={(sessionId, prompt) => terminalRef.current?.sendToExistingSession(sessionId, prompt)}
+          sessions={sessions}
         />
       ) : (
         <ReviewProjectPage
@@ -192,6 +198,9 @@ function App() {
           onNavigateToIssue={handleNavigateToIssue}
         />
       )}
+
+      {/* Terminal drawer - persists across page navigation */}
+      <TerminalDrawer ref={terminalRef} onSessionsChange={setSessions} />
 
       {/* Branch Context Modal */}
       {showBranchModal && currentBranch && pendingProjectOpen && (
