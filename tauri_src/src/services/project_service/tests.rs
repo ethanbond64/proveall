@@ -587,6 +587,39 @@ fn test_base_merge_lazy_creation_issues_visible_in_response() {
 }
 
 #[test]
+fn test_conflicted_base_merge_not_lazy_created() {
+    // Bug A: A conflicted merge should NOT be auto-reviewed by lazy_create_base_merge_events
+    // even when all prior commits have events.
+    let mut conn = test_conn();
+    let (dir, _) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // Feature commit
+    std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
+    let c1 = git_commit(&dir, "modify base.txt on feature");
+
+    // Main also modifies base.txt → conflict
+    git_checkout(&dir, "main");
+    std::fs::write(dir.path().join("base.txt"), "main version\n").unwrap();
+    git_commit(&dir, "main: modify base.txt");
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge_with_conflict(&dir, "main");
+
+    // Review c1 — all prior commits now have events
+    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+
+    // get_project_state should NOT lazy-create the conflicted merge event
+    let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
+
+    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
+    assert!(merge_entry.id.is_none(), "conflicted merge should NOT be lazy-created");
+    assert!(merge_entry.has_conflict_changes, "should have conflict changes");
+}
+
+#[test]
 fn test_multiple_base_merges_lazy_created_in_sequence() {
     // c1 (reviewed) -> merge1 -> c2 (reviewed) -> merge2
     // Both merges should be lazy-created in order.

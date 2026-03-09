@@ -135,3 +135,33 @@ pub fn git_checkout(dir: &TempDir, branch: &str) {
         .output()
         .unwrap();
 }
+
+/// Merge a branch that has a conflict on `base.txt`, resolve it, and commit.
+/// Assumes `base.txt` differs between current branch and `branch`.
+/// Returns the merge commit hash.
+pub fn git_merge_with_conflict(dir: &TempDir, branch: &str) -> String {
+    let output = Command::new("git")
+        .args(["merge", "--no-ff", branch, "-m", &format!("Merge {} (conflict)", branch)])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    // If the merge succeeded without conflict, panic — caller set up wrong
+    if output.status.success() {
+        panic!("Expected merge conflict but merge succeeded cleanly");
+    }
+
+    // Resolve conflict by picking a combined version
+    std::fs::write(dir.path().join("base.txt"), "resolved content\n").unwrap();
+    Command::new("git")
+        .args(["add", "base.txt"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--no-edit"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    git_rev_parse(dir)
+}
