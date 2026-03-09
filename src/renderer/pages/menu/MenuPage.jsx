@@ -70,9 +70,11 @@ function MenuPage({ onProjectSelected }) {
                     <div className="recent-project-menu-popup">
                       <button
                         className="recent-project-menu-popup-item delete"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // TODO: implement delete project
+                          await window.backendAPI.deleteProject(project.id);
+                          setOpenMenuProjectId(null);
+                          setRecentProjects(await window.backendAPI.projectsFetch(5));
                         }}
                       >
                         Delete Project

@@ -5,7 +5,8 @@ use crate::commands::event_commands::create_event;
 use crate::commands::fs_commands::get_directory;
 use crate::commands::llm_commands::fix_issue;
 use crate::commands::project_commands::{
-    create_branch_context, fetch_projects, get_current_branch, get_project_state, open_project,
+    create_branch_context, delete_project, fetch_projects, get_current_branch, get_project_state,
+    open_project,
 };
 use crate::commands::review_commands::{get_review_file_data, get_review_file_system_data};
 use crate::commands::settings_commands::{get_settings, reset_settings, set_settings};
@@ -70,6 +71,7 @@ pub fn run() {
             // Project menu APIs
             fetch_projects,
             open_project,
+            delete_project,
             // Branch context APIs
             create_branch_context,
             // Project review APIs
