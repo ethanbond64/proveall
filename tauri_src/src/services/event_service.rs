@@ -7,6 +7,7 @@ use diesel::Connection;
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
 use crate::db::schema::{branch_context, issues};
 use crate::error::AppError;
+use crate::models::branch_context::BranchContext;
 use crate::models::composite_file_review_state::{
     NewCompositeFileReviewState, ReviewSummaryMetadataEntry,
 };
@@ -84,8 +85,7 @@ fn create_event_inner(
             previous_event.as_ref(),
             &resolved_issues,
             path,
-            branch_context_id,
-            &branch_context.base_branch,
+            &branch_context
         )?
     } else {
         previous_event
@@ -163,10 +163,9 @@ fn create_intermediate_events(
     previous_event: Option<&crate::models::event::Event>,
     resolved_issues: &[String],
     project_path: &str,
-    branch_context_id: &str,
-    base_branch: &str,
+    branch_context: &BranchContext,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
-    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
+    let base_branch = &branch_context.base_branch;
 
     let base_commit_owned: Option<String> = match previous_event {
         Some(prev) => prev.hash.clone(),
@@ -228,7 +227,7 @@ fn create_intermediate_events(
                     resolved_issues,
                     project_path,
                     commit: &commit.hash,
-                    branch_context_id,
+                    branch_context_id: branch_context.id.as_str(),
                     skip_file_translation: is_base_merge,
                 },
             )?;

@@ -54,6 +54,7 @@ pub fn get_project_state(
         });
     }
 
+    // TODO this range is NOT the true range of commits that you see in github when you go to merge into the base branch - instead it is the diff between main HEAD and now...
     let range = format!("{}..HEAD", base_branch);
     let diff_summary = build_diff_summary(path, &range)?;
     let mut event_entries = build_event_entries(conn, path, &range, project_id, &base_branch)?;
@@ -184,7 +185,7 @@ fn build_event_entries(
 /// an event automatically so the xref chain remains unbroken for the next real review.
 fn lazy_create_base_merge_events(
     conn: &mut SqliteConnection,
-    entries: &mut Vec<EventEntry>,
+    entries: &mut [EventEntry],
     project_id: &str,
     project_path: &str,
     branch_context_id: &str,
