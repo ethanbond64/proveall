@@ -194,7 +194,7 @@ fn lazy_create_base_merge_events(
     // Track the most recent event id we've seen so far (for xref propagation).
     let len = entries.len();
     for i in (0..len).rev() {
-        if !entries[i].is_base_merge || entries[i].id.is_some() {
+        if !entries[i].is_base_merge || entries[i].id.is_some() || entries[i].has_conflict_changes {
             continue;
         }
 
