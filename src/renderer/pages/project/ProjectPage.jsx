@@ -1,12 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from '../../constants';
 import '../../styles.css';
 import logoImage from '../../Square310x310Logo.png';
 
-function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, fixingIssueId, setFixingIssueId, onShowSettings }) {
+function ProjectPage({ project, projectState, setProjectState, branchContextId, onNavigateToReview, onNavigateBack, onShowSettings, onOpenNewSession, onSendToExistingSession, sessions }) {
   const [isRefreshingPage, setIsRefreshingPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTargetCommit, setSelectedTargetCommit] = useState(null);
+  const [sendToLlmDropdownIssueId, setSendToLlmDropdownIssueId] = useState(null);
+  // Send-to-LLM confirmation modal state
+  const [sendModal, setSendModal] = useState(null); // { issueId, prompt, command, args, targetSessionId }
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!sendToLlmDropdownIssueId) return;
+    const handleClick = () => setSendToLlmDropdownIssueId(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [sendToLlmDropdownIssueId]);
 
   // Extract data from projectState
   const commits = projectState?.events || [];
@@ -112,19 +123,44 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
     loadProjectState();
   }, [project?.id, branchContextId]);
 
-  const handleFixWithLLM = async (e, issue) => {
-    e.stopPropagation();
-    if (fixingIssueId) return;
-    setFixingIssueId(issue.id);
-    try {
-      await window.backendAPI.fixIssue(project.id, issue.id, branchContextId);
-      await loadProjectState();
-    } catch (error) {
-      console.error('Failed to fix issue:', error);
-      alert('Failed to fix issue: ' + error);
-    } finally {
-      setFixingIssueId(null);
+  // Map of issue ID -> session label for issues currently being fixed
+  const issueSessionMap = useMemo(() => {
+    const map = new Map();
+    for (const s of sessions) {
+      if (s.issueId) map.set(s.issueId, s.label);
     }
+    return map;
+  }, [sessions]);
+
+  const openSendModal = async (e, issue, targetSessionId = null) => {
+    e.stopPropagation();
+    setSendToLlmDropdownIssueId(null);
+    try {
+      const [prompt, settings] = await Promise.all([
+        window.backendAPI.buildIssuePrompt(issue.id, branchContextId),
+        window.backendAPI.getSettings(),
+      ]);
+      setSendModal({
+        issueId: issue.id,
+        prompt,
+        command: settings.llm_command || 'claude',
+        args: settings.llm_args || '',
+        targetSessionId,
+      });
+    } catch (error) {
+      console.error('Failed to build prompt:', error);
+      alert('Failed to build prompt: ' + error);
+    }
+  };
+
+  const handleSendModalConfirm = () => {
+    if (!sendModal) return;
+    if (sendModal.targetSessionId != null) {
+      onSendToExistingSession(sendModal.targetSessionId, sendModal.prompt);
+    } else {
+      onOpenNewSession(project.path, sendModal.prompt, sendModal.issueId, sendModal.command, sendModal.args);
+    }
+    setSendModal(null);
   };
 
   // Handle commit click - select for bulk review or toggle selection
@@ -350,23 +386,59 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
               {isLoading ? (
                 <div className="empty-state">Loading...</div>
               ) : issues.length > 0 ? (
-                issues.map((issue) => (
-                  //  TODO index of 0 is unsafe
-                  <div key={issue.id} className="issue-item" onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
-                    <div className="issue-item-content">
-                      <div className="issue-id">#{issue.id.substring(0, 8)}</div>
-                      <div className="issue-comment">{issue.comment}</div>
+                issues.map((issue) => {
+                  const fixingSessionLabel = issueSessionMap.get(issue.id);
+                  const isInSession = !!fixingSessionLabel;
+                  return (
+                    //  TODO index of 0 is unsafe
+                    <div key={issue.id} className="issue-item" style={isInSession ? { opacity: 0.5 } : undefined} onClick={() => onNavigateToReview(commits[0].commit, BRANCH_COMPARISON_MODE, issue.id)}>
+                      <div className="issue-item-content">
+                        <div className="issue-id">#{issue.id.substring(0, 8)}</div>
+                        <div className="issue-comment">{issue.comment}</div>
+                        {isInSession && <span style={{ fontSize: '11px', color: '#4ec9b0', marginLeft: '8px' }}>Fixing in {fixingSessionLabel}</span>}
+                      </div>
+                      <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: 0 }}>
+                          <button
+                            className="header-icon-btn"
+                            onClick={(e) => openSendModal(e, issue)}
+                            disabled={isInSession}
+                            title={isInSession ? `Fixing in ${fixingSessionLabel}` : 'Send to LLM'}
+                            style={sessions.length > 0 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
+                          >
+                            ⚒
+                          </button>
+                          {sessions.length > 0 && !isInSession && (
+                            <button
+                              className="header-icon-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSendToLlmDropdownIssueId(sendToLlmDropdownIssueId === issue.id ? null : issue.id);
+                              }}
+                              title="Send to existing session"
+                              style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,0.2)', padding: '4px 6px' }}
+                            >
+                              ▾
+                            </button>
+                          )}
+                        </div>
+                        {sendToLlmDropdownIssueId === issue.id && sessions.length > 0 && !isInSession && (
+                          <div className="diff-source-dropdown" style={{ right: 0, left: 'auto', minWidth: '160px' }}>
+                            {sessions.map(s => (
+                              <div
+                                key={s.id}
+                                className="diff-source-option"
+                                onClick={(e) => openSendModal(e, issue, s.id)}
+                              >
+                                {s.label}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      className="btn-primary btn-sm"
-                      onClick={(e) => handleFixWithLLM(e, issue)}
-                      disabled={fixingIssueId === issue.id}
-                      title={fixingIssueId === issue.id ? "Fixing this issue..." : "Send to LLM"}
-                    >
-                      {fixingIssueId === issue.id ? 'Fixing...' : 'Send to LLM'}
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="empty-state">No issues</div>
               )}
@@ -374,6 +446,61 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
           </div>
         </div>
       </div>
+      {/* Send to LLM confirmation modal */}
+      {sendModal && (
+        <div className="modal-overlay" onClick={() => setSendModal(null)}>
+          <div className="modal-container" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{sendModal.targetSessionId != null ? 'Send to Existing Session' : 'Send to LLM'}</h2>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Command</label>
+                <input
+                  type="text"
+                  value={sendModal.command}
+                  disabled={sendModal.targetSessionId != null}
+                  onChange={e => setSendModal(prev => ({ ...prev, command: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Arguments</label>
+                <input
+                  type="text"
+                  value={sendModal.args}
+                  disabled={sendModal.targetSessionId != null}
+                  placeholder="Optional CLI flags"
+                  onChange={e => setSendModal(prev => ({ ...prev, args: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Prompt</label>
+                <textarea
+                  value={sendModal.prompt}
+                  onChange={e => setSendModal(prev => ({ ...prev, prompt: e.target.value }))}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: '#1e1e1e',
+                    border: '1px solid #3e3e42',
+                    borderRadius: '4px',
+                    color: '#cccccc',
+                    fontSize: '12px',
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    minHeight: '150px',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setSendModal(null)}>Cancel</button>
+              <button className="btn-primary" onClick={handleSendModalConfirm}>
+                {sendModal.targetSessionId != null ? 'Send' : 'Launch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
