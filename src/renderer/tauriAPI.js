@@ -30,7 +30,7 @@ window.backendAPI = {
   setSettings: (settings) => invoke('set_settings', { settings }),
   resetSettings: () => invoke('reset_settings'),
 
-  ptySpawn: (projectPath, cols, rows) => invoke('pty_spawn', { projectPath, cols, rows }),
+  ptySpawn: (projectPath, cols, rows, command, args) => invoke('pty_spawn', { projectPath, cols, rows, command, args }),
   ptyWrite: (sessionId, data) => invoke('pty_write', { sessionId, data }),
   ptyResize: (sessionId, cols, rows) => invoke('pty_resize', { sessionId, cols, rows }),
   ptyKill: (sessionId) => invoke('pty_kill', { sessionId }),

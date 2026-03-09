@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { listen } from '@tauri-apps/api/event';
 
-function TerminalPanel({ projectPath, prompt, pendingPrompt, onClearPendingPrompt, onClose, onRunningChange }) {
+function TerminalPanel({ projectPath, prompt, pendingPrompt, onClearPendingPrompt, onClose, onRunningChange, command, args }) {
   const termRef = useRef(null);
   const terminalInstance = useRef(null);
   const fitAddon = useRef(null);
@@ -107,7 +107,7 @@ function TerminalPanel({ projectPath, prompt, pendingPrompt, onClearPendingPromp
 
       try {
         const { cols, rows } = term;
-        const sessionId = await window.backendAPI.ptySpawn(projectPath, cols, rows);
+        const sessionId = await window.backendAPI.ptySpawn(projectPath, cols, rows, command, args);
         sessionIdRef.current = sessionId;
         setIsRunning(true);
 

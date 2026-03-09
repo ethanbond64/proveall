@@ -70,10 +70,10 @@ function App() {
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
 
-  const handleOpenNewSession = (projectPath, prompt, issueId = null) => {
+  const handleOpenNewSession = (projectPath, prompt, issueId = null, command = null, args = null) => {
     const id = nextSessionId.current++;
     const label = `Session ${id}`;
-    setSessions(prev => [...prev, { id, projectPath, prompt, pendingPrompt: null, label, issueId }]);
+    setSessions(prev => [...prev, { id, projectPath, prompt, pendingPrompt: null, label, issueId, command, args }]);
     setActiveSessionId(id);
     setMinimized(false);
   };
@@ -362,6 +362,8 @@ function App() {
                 onClearPendingPrompt={() => handleClearPendingPrompt(session.id)}
                 onClose={() => handleCloseSession(session.id)}
                 onRunningChange={(running) => handleRunningChange(session.id, running)}
+                command={session.command}
+                args={session.args}
               />
             </div>
           ))}
