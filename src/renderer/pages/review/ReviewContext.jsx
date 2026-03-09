@@ -82,6 +82,19 @@ function reviewReducer(state, action) {
         });
       }
 
+      // Auto-approve merge-only files in interactive modes
+      const fileReviews = new Map(state.session.fileReviews);
+      if (isInteractiveReviewMode(mode)) {
+        touchedFilesMap.forEach((file, path) => {
+          if (file.mergeOnly) {
+            fileReviews.set(path, {
+              ...(fileReviews.get(path) || { lineRanges: [] }),
+              defaultState: 'green',
+            });
+          }
+        });
+      }
+
       return {
         ...state,
         mode,
@@ -92,6 +105,10 @@ function reviewReducer(state, action) {
         branchContextId,
         touchedFiles: touchedFilesMap,
         issues: issuesMap,
+        session: {
+          ...state.session,
+          fileReviews,
+        },
         isLoading: false,
       };
     }
