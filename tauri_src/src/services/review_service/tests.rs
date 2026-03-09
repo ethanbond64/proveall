@@ -376,6 +376,207 @@ fn test_file_data_with_issue_returns_line_summary() {
 }
 
 // ---------------------------------------------------------------------------
+// Merge-only files in commit (bulk) mode
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_commit_bulk_merge_only_files_separated() {
+    // Bulk review spanning: c1 (normal) + merge (base merge with merge-only file)
+    // merge-only files should have merge_only: true
+    let mut conn = test_conn();
+    let (dir, base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // c1 on feature: add feature.txt
+    std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
+    let c1 = git_commit(&dir, "add feature.txt");
+
+    // Make a change on main (different file) and merge into feature
+    git_checkout(&dir, "main");
+    std::fs::write(dir.path().join("main_only.txt"), "from main\n").unwrap();
+    git_commit(&dir, "main: add main_only.txt");
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge(&dir, "main");
+
+    // Bulk review from base..merge_hash covers c1 + merge
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        merge_hash,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // feature.txt touched by c1 (normal commit) → merge_only: false
+    let feature_file = result.touched_files.iter().find(|f| f.path == "feature.txt")
+        .expect("feature.txt should be in touched files");
+    assert!(!feature_file.merge_only, "feature.txt is from a normal commit");
+
+    // main_only.txt only touched by the merge → merge_only: true
+    let main_file = result.touched_files.iter().find(|f| f.path == "main_only.txt")
+        .expect("main_only.txt should be in touched files");
+    assert!(main_file.merge_only, "main_only.txt is only from a merge commit");
+}
+
+#[test]
+fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
+    // A file touched by both a normal commit and a merge should NOT be merge_only
+    let mut conn = test_conn();
+    let (dir, base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // c1 on feature: modify base.txt
+    std::fs::write(dir.path().join("base.txt"), "feature change\n").unwrap();
+    let c1 = git_commit(&dir, "modify base.txt on feature");
+
+    // Main also modifies base.txt (will appear in merge diff too)
+    git_checkout(&dir, "main");
+    std::fs::write(dir.path().join("base.txt"), "main change\n").unwrap();
+    git_commit(&dir, "main: modify base.txt");
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge_with_conflict(&dir, "main");
+
+    // Bulk review from base..merge
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        merge_hash,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // base.txt is touched by c1 (normal) AND the merge — should NOT be merge_only
+    let base_file = result.touched_files.iter().find(|f| f.path == "base.txt")
+        .expect("base.txt should be in touched files");
+    assert!(!base_file.merge_only, "base.txt is touched by a normal commit too");
+}
+
+#[test]
+fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
+    // Conflict resolution files from a conflicted merge should NOT be merge_only
+    let mut conn = test_conn();
+    let (dir, base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // c1 on feature: add a separate file
+    std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
+    let c1 = git_commit(&dir, "add feature.txt");
+
+    // Modify base.txt on feature to set up conflict
+    std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
+    git_commit(&dir, "modify base.txt on feature");
+
+    // Main also modifies base.txt
+    git_checkout(&dir, "main");
+    std::fs::write(dir.path().join("base.txt"), "main version\n").unwrap();
+    git_commit(&dir, "main: modify base.txt");
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge_with_conflict(&dir, "main");
+
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        merge_hash,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // base.txt has conflict changes → should NOT be merge_only
+    let base_file = result.touched_files.iter().find(|f| f.path == "base.txt")
+        .expect("base.txt should be in touched files");
+    assert!(!base_file.merge_only, "conflict resolution files should not be merge_only");
+}
+
+#[test]
+fn test_commit_single_no_merge_all_files_normal() {
+    // Single commit review with no merges — all files should have merge_only: false
+    let mut conn = test_conn();
+    let (dir, base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+    let (project_id, bc_id) = setup_db_records(&mut conn, repo_path);
+
+    // Review base commit
+    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+
+    std::fs::write(dir.path().join("new.txt"), "hello\n").unwrap();
+    let c1 = git_commit(&dir, "add new.txt");
+
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        c1,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    for f in &result.touched_files {
+        assert!(!f.merge_only, "file {} should not be merge_only in single commit", f.path);
+    }
+}
+
+#[test]
+fn test_commit_non_base_merge_files_not_merge_only() {
+    // Non-base merges (e.g. merging a feature branch into another feature branch)
+    // should be treated as normal commits — their files should NOT be merge_only
+    let mut conn = test_conn();
+    let (dir, base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // Create another branch "other" from the same base
+    git_checkout(&dir, "main");
+    Command::new("git")
+        .args(["checkout", "-b", "other"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    std::fs::write(dir.path().join("other.txt"), "other\n").unwrap();
+    git_commit(&dir, "add other.txt on other");
+
+    // Back to feature, merge "other" (not the base branch)
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge(&dir, "other");
+
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        merge_hash,
+        None,
+        "commit".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // other.txt comes from a non-base merge → should NOT be merge_only
+    let other_file = result.touched_files.iter().find(|f| f.path == "other.txt")
+        .expect("other.txt should be in touched files");
+    assert!(!other_file.merge_only, "non-base-merge files should not be merge_only");
+}
+
+// ---------------------------------------------------------------------------
 // Branch-mode get_review_file_system_data tests
 // ---------------------------------------------------------------------------
 
