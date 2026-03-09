@@ -1,13 +1,34 @@
 # ProveAll
 
-ProveAll is a desktop code review tool that helps software developers keep track of their branches as they use AI to assist in writing code. With ProveAll, developers can review individual commits line by line in a full editor, raising issues when code needs to be fixed, storing notes on code that needs to be revisited, or approving code that has been verified, understood, and is ready to ship. By tracking reviews alongside the version control system, developers are able to get a full view of the state of their branch across multiple commit reviews.
+**Code Coverage for Human Understanding**
 
-The suggested workflow is to commit after each AI prompt completes, then switch over to ProveAll to review what was written. While reviewing you can optionally execute the next prompt which can be committed or discarded depending on the outcome of the previous commit's review. Once all commits have all been reviewed, developers can view a composite view of all changes alongside the list of open issues to address or resolve.
+[![License](https://img.shields.io/github/license/ethanbond64/proveall)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ethanbond64/proveall)](https://github.com/ethanbond64/proveall/releases)
 
-## Setup and Run
+**Currently available on:** macOS (Apple Silicon)
 
-Note: Git is currently the only supported VCS.
+ProveAll is a desktop app that helps developers maintain understanding and control of AI-generated code. It's built on top of Git, storing a "review state" of every line of code at each commit. ProveAll gives you a structured way to prove you understand every line before it ships.
 
-To build and run this from source, you will need [Node.js](https://nodejs.org/) and [rustup](https://rustup.rs/).
+## Installation
 
-Clone the repository, run `npm install` to install dependencies, then run `cargo tauri build` to build the Tauri application. The built application can be found in: `tauri_src/target/release/bundle/`
+Download the latest `.dmg` from the [GitHub Releases page](https://github.com/ethanbond64/proveall/releases), open it, and drag ProveAll to your Applications folder.
+
+## Example usage
+
+### Project Page
+View commit history, review history, and open issues in your branch at a glance.
+
+![Project Page](docs/imgs/ProjectPageScreenshot.png)
+
+### Branch Comparison View
+See the full diff of your branch against its base, with line-level approval status and inline issues.
+
+![Branch Comparison View](docs/imgs/ReviewPageScreenshot.png)
+
+## Suggested Workflow
+
+1. **Commit your work.** Commit any work done by an AI coding agent immediately. This gives you a reviewable unit of work.
+2. **Review the commit in ProveAll.** Open the commit in ProveAll's editor. Go through the diff file by file, or line by line. Approve what you understand, raise issues on anything that looks wrong or unclear. 
+3. **Iterate in parallel.** While reviewing one commit, kick off your next AI prompt in the background. Commit or discard the result based on how the previous review went.
+4. **Check the branch view.** Once all commits are reviewed, open the branch comparison to see the composite state: which files are fully approved, which still have open issues, and which lines need to be addressed before merging.
+
