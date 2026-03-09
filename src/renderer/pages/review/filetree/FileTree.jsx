@@ -115,7 +115,7 @@ function FileTree({
 }) {
   const context = useReviewContext();
   const [filePopupState, setFilePopupState] = useState(null);
-  const [expandedSections, setExpandedSections] = useState({ issues: true, approved: true });
+  const [expandedSections, setExpandedSections] = useState({ issues: true, approved: true, mergeOnly: false });
   const hoverTimeoutRef = useRef(null);
   const popupExpandedRef = useRef(false);
 
@@ -125,6 +125,20 @@ function FileTree({
   // In branch mode, categorize files by their review state
   let filesWithIssues = [];
   let approvedFiles = [];
+
+  // In commit mode, separate merge-only files
+  let normalFiles = [];
+  let mergeOnlyFiles = [];
+
+  if (context.mode !== BRANCH_COMPARISON_MODE) {
+    touchedFiles.forEach(file => {
+      if (file.mergeOnly) {
+        mergeOnlyFiles.push(file);
+      } else {
+        normalFiles.push(file);
+      }
+    });
+  }
 
   if (context.mode === BRANCH_COMPARISON_MODE) {
     touchedFiles.forEach(file => {
@@ -263,9 +277,9 @@ function FileTree({
             )}
           </>
         ) : (
-          // Commit mode: Show all files as before
+          // Commit mode: Show normal files, then merge-only section if any
           <>
-            {touchedFiles.map(file => (
+            {normalFiles.map(file => (
               <FileTreeItem
                 key={file.path}
                 file={file}
@@ -275,6 +289,33 @@ function FileTree({
                 onHoverLeaveButton={scheduleClose}
               />
             ))}
+
+            {mergeOnlyFiles.length > 0 && (
+              <div className="file-tree-section">
+                <div
+                  className="file-tree-section-header"
+                  onClick={() => toggleSection('mergeOnly')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span className="tree-chevron" style={{ transform: expandedSections.mergeOnly ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                  <span className="file-tree-section-title">Merge Commit Files ({mergeOnlyFiles.length})</span>
+                </div>
+                {expandedSections.mergeOnly && (
+                  <div className="file-tree-section-content">
+                    {mergeOnlyFiles.map(file => (
+                      <FileTreeItem
+                        key={file.path}
+                        file={file}
+                        isSelected={selectedPath === file.path}
+                        onSelectFile={onSelectFile}
+                        onShowPopup={handleShowPopup}
+                        onHoverLeaveButton={scheduleClose}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
