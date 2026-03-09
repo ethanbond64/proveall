@@ -1,6 +1,6 @@
 {
   "name": "proveall",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "ProveAll - Code review and verification tool",
   "private": true,
   "type": "module",
