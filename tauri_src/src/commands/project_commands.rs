@@ -1,11 +1,12 @@
 use chrono::Utc;
 use diesel::prelude::*;
-use diesel::sql_query;
-use diesel::sql_types::Text;
 use serde::Serialize;
 use tauri::State;
 
-use crate::db::schema::projects;
+use crate::db::schema::{
+    branch_context, composite_file_review_state, event_issue_composite_xref, events, issues,
+    projects, reviews,
+};
 use crate::models::branch_context::NewBranchContext;
 use crate::models::project::{NewProject, ProjectLastOpenedUpdate};
 use crate::repositories::{branch_context_repo, project_repo};
@@ -162,45 +163,44 @@ pub fn get_current_branch(state: State<DbState>, project_id: String) -> Result<S
 pub fn delete_project(state: State<DbState>, project_id: String) -> Result<(), String> {
     let mut conn = state.0.lock().unwrap();
     conn.transaction(|conn| {
-        // Delete in order respecting FK constraints (children first)
-        // 1. reviews (depends on issues)
-        sql_query(
-            "DELETE FROM reviews WHERE issue_id IN (SELECT id FROM issues WHERE project_id = ?)",
-        )
-        .bind::<Text, _>(&project_id)
-        .execute(conn)?;
+        let project_issue_ids = issues::table
+            .filter(issues::project_id.eq(&project_id))
+            .select(issues::id);
 
-        // 2. event_issue_composite_xref (depends on events, issues, composite_file_review_state, branch_context)
-        sql_query(
-            "DELETE FROM event_issue_composite_xref WHERE event_id IN (SELECT id FROM events WHERE project_id = ?)",
+        let project_event_ids = events::table
+            .filter(events::project_id.eq(&project_id))
+            .select(events::id);
+
+        // 1. reviews (via issues)
+        diesel::delete(reviews::table.filter(reviews::issue_id.eq_any(project_issue_ids)))
+            .execute(conn)?;
+
+        // 2. event_issue_composite_xref (via events)
+        diesel::delete(
+            event_issue_composite_xref::table
+                .filter(event_issue_composite_xref::event_id.eq_any(project_event_ids)),
         )
-        .bind::<Text, _>(&project_id)
         .execute(conn)?;
 
         // 3. issues
-        sql_query("DELETE FROM issues WHERE project_id = ?")
-            .bind::<Text, _>(&project_id)
-            .execute(conn)?;
+        diesel::delete(issues::table.filter(issues::project_id.eq(&project_id))).execute(conn)?;
 
         // 4. branch_context
-        sql_query("DELETE FROM branch_context WHERE project_id = ?")
-            .bind::<Text, _>(&project_id)
+        diesel::delete(branch_context::table.filter(branch_context::project_id.eq(&project_id)))
             .execute(conn)?;
 
         // 5. composite_file_review_state
-        sql_query("DELETE FROM composite_file_review_state WHERE project_id = ?")
-            .bind::<Text, _>(&project_id)
-            .execute(conn)?;
+        diesel::delete(
+            composite_file_review_state::table
+                .filter(composite_file_review_state::project_id.eq(&project_id)),
+        )
+        .execute(conn)?;
 
         // 6. events
-        sql_query("DELETE FROM events WHERE project_id = ?")
-            .bind::<Text, _>(&project_id)
-            .execute(conn)?;
+        diesel::delete(events::table.filter(events::project_id.eq(&project_id))).execute(conn)?;
 
         // 7. projects
-        sql_query("DELETE FROM projects WHERE id = ?")
-            .bind::<Text, _>(&project_id)
-            .execute(conn)?;
+        diesel::delete(projects::table.filter(projects::id.eq(&project_id))).execute(conn)?;
 
         Ok(())
     })
