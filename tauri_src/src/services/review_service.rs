@@ -60,7 +60,7 @@ pub fn get_review_file_system_data(
                 &branch_context.base_branch,
             )?;
             (
-                build_commit_touched_files(path, &commit, &base_ref)?,
+                build_commit_touched_files(path, &commit, &base_ref, &branch_context.base_branch)?,
                 build_issues_from_event(
                     conn,
                     branch_context.head_event_id.as_deref(),
@@ -118,17 +118,61 @@ fn build_commit_touched_files(
     project_path: &str,
     commit: &str,
     base_ref: &str,
+    base_branch: &str,
 ) -> Result<Vec<TouchedFile>, AppError> {
     let diff_files = diff_changed_files(project_path, &[base_ref, commit])?;
 
+    // Enumerate commits in the range to determine which files come only from merges.
+    let range = format!("{}..{}", base_ref, commit);
+    let commits = git::log(project_path, &["--first-parent", &range]).unwrap_or_default();
+
+    // Collect files that appear in non-merge commits or as conflict files in merges.
+    // These are "normal" files that the user should review.
+    let mut normal_files: HashSet<String> = HashSet::new();
+
+    for c in &commits {
+        let is_merge = c.parents.len() > 1;
+        let is_base_merge = is_merge
+            && git::is_base_branch_merge(project_path, &c.parents, base_branch);
+
+        if is_base_merge {
+            // Only conflict resolution files from base merges count as normal
+            if let Ok(cc_output) = git::diff_tree_cc_name_only(project_path, &c.hash) {
+                for line in cc_output.lines().filter(|l| !l.is_empty()) {
+                    normal_files.insert(line.to_string());
+                }
+            }
+        } else {
+            // Non-merge or non-base-merge: all changed files are normal
+            // Use diff against parent to get this commit's files
+            if let Some(parent) = c.parents.first() {
+                if let Ok(files) = diff_changed_files(project_path, &[parent, &c.hash]) {
+                    for f in files {
+                        normal_files.insert(f.path);
+                    }
+                }
+            } else {
+                // Root commit — diff against empty tree
+                if let Ok(files) = diff_changed_files(project_path, &[&c.hash]) {
+                    for f in files {
+                        normal_files.insert(f.path);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(diff_files
         .into_iter()
-        .map(|f| TouchedFile {
-            name: extract_file_name(&f.path),
-            path: f.path,
-            diff_mode: Some(f.status),
-            state: "red".to_string(),
-            merge_only: false,
+        .map(|f| {
+            let merge_only = !normal_files.contains(&f.path);
+            TouchedFile {
+                name: extract_file_name(&f.path),
+                path: f.path,
+                diff_mode: Some(f.status),
+                state: "red".to_string(),
+                merge_only,
+            }
         })
         .collect())
 }

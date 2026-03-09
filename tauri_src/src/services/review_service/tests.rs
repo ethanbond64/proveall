@@ -391,6 +391,9 @@ fn test_commit_bulk_merge_only_files_separated() {
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
+    // Review the fork-point (base_hash) so head_event_id is set
+    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+
     // c1 on feature: add feature.txt
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
     let c1 = git_commit(&dir, "add feature.txt");
@@ -402,7 +405,7 @@ fn test_commit_bulk_merge_only_files_separated() {
     git_checkout(&dir, "feature");
     let merge_hash = git_merge(&dir, "main");
 
-    // Bulk review from base..merge_hash covers c1 + merge
+    // Bulk review from base_hash..merge_hash covers c1 + merge
     let result = get_review_file_system_data(
         &mut conn,
         &project_id,
@@ -434,6 +437,8 @@ fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
 
     // c1 on feature: modify base.txt
     std::fs::write(dir.path().join("base.txt"), "feature change\n").unwrap();
@@ -473,6 +478,8 @@ fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
     setup_feature_branch(&dir);
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
 
     // c1 on feature: add a separate file
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
@@ -546,8 +553,13 @@ fn test_commit_non_base_merge_files_not_merge_only() {
     let (project_id, bc_id) =
         setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
-    // Create another branch "other" from the same base
-    git_checkout(&dir, "main");
+    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+
+    // Make a commit on feature so "other" branch diverges from feature, not main
+    std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
+    git_commit(&dir, "add feature.txt");
+
+    // Create another branch "other" from the feature branch
     Command::new("git")
         .args(["checkout", "-b", "other"])
         .current_dir(dir.path())
