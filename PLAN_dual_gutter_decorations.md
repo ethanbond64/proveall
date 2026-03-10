@@ -145,7 +145,7 @@ Replace single-dot glyph styles with a dual-dot approach. The `glyphMarginClassN
 - The before dot should be slightly smaller or lower opacity to visually subordinate it.
 - Selection highlight (`.line-review-dot-selected`) applies a blue outline around the whole container.
 
-<!-- TODO: Monaco's glyph margin renders each className as an absolutely-positioned div.
+<!-- NOTE: Monaco's glyph margin renders each className as an absolutely-positioned div.
      Need to verify that flexbox/pseudo-elements actually work inside Monaco's glyph margin
      containers. If not, alternative approaches:
      1. Use two separate decoration layers (glyphMarginClassName + marginClassName)
@@ -154,16 +154,7 @@ Replace single-dot glyph styles with a dual-dot approach. The `glyphMarginClassN
      Prototype this early in implementation. -->
 
 ### Step 1.6: Handle inline diff mode
-
-<!-- TODO: In inline diff mode (not side-by-side), the modified editor shows both old and new
-     lines interleaved. The dual-dot approach still works (both dots on the modified editor),
-     but the "Before" dot mapping may behave differently since deleted lines appear inline.
-     Options:
-     1. Force side-by-side mode when dual dots are active
-     2. Adjust mapping logic for inline mode
-     Recommend option 1 for initial implementation. -->
-
----
+- Delete the button that exposes inline diff mode and don't handle it anymore
 
 ## Part 2: Issue Conflict Prompting Modal
 
@@ -290,9 +281,10 @@ The `lineSummary` data is already available in `openFiles.get(path)` in the Revi
 ## Open Questions (TODOs)
 
 1. **LineSummary line number reference frame**: Do the `start`/`end` values in `lineSummary` correspond to the file at the HEAD event's commit? (Assumed yes — this would mean they map to the original-side editor content for a new commit review.)
-
+  - ANSWER: YES
 2. **"Earliest commit in range" clarification**: When reviewing bulk commits, does "before" mean the state from before the entire range, or from the first commit in the range?
-
+  - ANSWER: STATE FROM BEFORE THE RANGE (IF THERE IS ONE). THIS WILL EITHER BE THE HEAD EVENT COMMIT OR THE LAST COMMON ANCESTOR WITH THE BASE BRANCH
 3. **Monaco glyph margin CSS feasibility**: Can Monaco's `glyphMarginClassName` divs support flexbox + pseudo-elements for dual dots? Needs early prototyping — fallback approaches listed in Step 1.5 TODO.
-
+  - ANSWER: LETS EXPERIMENT AND SEE WHAT IT LOOKS LIKE BEFORE COMMITING ONE WAY OR ANOTHER
 4. **Partial range splitting**: When a user approves a range but chooses "Maintain" for some issues within it, we need range-splitting logic. Confirm this is the desired behavior vs. simpler alternatives (e.g., all-or-nothing per range).
+  - ANSWER: KEEP IT SIMPLE AND DO ALL OR NOTHING FOR THE FIRST PASS.
