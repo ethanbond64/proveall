@@ -1417,58 +1417,69 @@ body {
 }
 
 /* =============================================================
-   Dual-Column Glyph Margin Styles (Before dot + New dot)
+   Dual-Column Glyph Margin Styles (Before square + New square)
    Each line gets a glyphMarginClassName like:
      "line-review-dual before-green new-grey"
-   Uses background-image with radial-gradient to paint two dots
-   directly onto Monaco's absolutely-positioned glyph margin div.
+   Uses background + linear-gradient to paint two squares
+   side-by-side onto Monaco's glyph margin div.
    ============================================================= */
 
 .line-review-dual {
   cursor: pointer !important;
   background-repeat: no-repeat !important;
+  background-size: calc(50% - 1px) 80%, calc(50% - 1px) 80% !important;
+  background-position: 0% center, 100% center !important;
 }
 
-/* --- Before dot (left, smaller/dimmer) --- */
-.before-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%) !important; }
-.before-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%) !important; }
-.before-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%) !important; }
-.before-none   { background-image: none !important; }
+/* Before square colors (left) */
+.before-green  { --before-color: #4caf50; }
+.before-yellow { --before-color: #ffc107; }
+.before-red    { --before-color: #f44336; }
+.before-none   { --before-color: #1e1e1e; }
 
-/* --- New dot (right, primary) + Before dot combined ---
-   CSS background-image stacks: first value is on top.
-   We put the "new" dot second so both render via comma-separated gradients.
-   Re-declare combined backgrounds per before×new combination. */
+/* New square colors (right) */
+.new-green  { --new-color: #4caf50; }
+.new-yellow { --new-color: #ffc107; }
+.new-red    { --new-color: #f44336; }
+.new-grey   { --new-color: #999999; }
 
-/* before-green combinations */
-.before-green.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
-.before-green.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
-.before-green.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
-.before-green.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
+/* Combined backgrounds using linear-gradient as solid fills with border effect.
+   Each gradient is a solid color; background-size/position places them as two squares. */
 
-/* before-yellow combinations */
-.before-yellow.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
-.before-yellow.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
-.before-yellow.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
-.before-yellow.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
+/* before-green */
+.before-green.new-green  { background-image: linear-gradient(#4caf50, #4caf50), linear-gradient(#4caf50, #4caf50) !important; }
+.before-green.new-yellow { background-image: linear-gradient(#4caf50, #4caf50), linear-gradient(#ffc107, #ffc107) !important; }
+.before-green.new-red    { background-image: linear-gradient(#4caf50, #4caf50), linear-gradient(#f44336, #f44336) !important; }
+.before-green.new-grey   { background-image: linear-gradient(#4caf50, #4caf50), linear-gradient(#999999, #999999) !important; }
 
-/* before-red combinations */
-.before-red.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
-.before-red.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
-.before-red.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
-.before-red.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
+/* before-yellow */
+.before-yellow.new-green  { background-image: linear-gradient(#ffc107, #ffc107), linear-gradient(#4caf50, #4caf50) !important; }
+.before-yellow.new-yellow { background-image: linear-gradient(#ffc107, #ffc107), linear-gradient(#ffc107, #ffc107) !important; }
+.before-yellow.new-red    { background-image: linear-gradient(#ffc107, #ffc107), linear-gradient(#f44336, #f44336) !important; }
+.before-yellow.new-grey   { background-image: linear-gradient(#ffc107, #ffc107), linear-gradient(#999999, #999999) !important; }
 
-/* before-none: only show the new dot (right side) */
-.before-none.new-green  { background-image: radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
-.before-none.new-yellow { background-image: radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
-.before-none.new-red    { background-image: radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
-.before-none.new-grey   { background-image: radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
+/* before-red */
+.before-red.new-green  { background-image: linear-gradient(#f44336, #f44336), linear-gradient(#4caf50, #4caf50) !important; }
+.before-red.new-yellow { background-image: linear-gradient(#f44336, #f44336), linear-gradient(#ffc107, #ffc107) !important; }
+.before-red.new-red    { background-image: linear-gradient(#f44336, #f44336), linear-gradient(#f44336, #f44336) !important; }
+.before-red.new-grey   { background-image: linear-gradient(#f44336, #f44336), linear-gradient(#999999, #999999) !important; }
 
-/* Blue outline on glyph dots when lines are selected in the editor */
+/* before-none (net-new lines): black left square */
+.before-none.new-green  { background-image: linear-gradient(#1e1e1e, #1e1e1e), linear-gradient(#4caf50, #4caf50) !important; }
+.before-none.new-yellow { background-image: linear-gradient(#1e1e1e, #1e1e1e), linear-gradient(#ffc107, #ffc107) !important; }
+.before-none.new-red    { background-image: linear-gradient(#1e1e1e, #1e1e1e), linear-gradient(#f44336, #f44336) !important; }
+.before-none.new-grey   { background-image: linear-gradient(#1e1e1e, #1e1e1e), linear-gradient(#999999, #999999) !important; }
+
+/* Subtle border via outline on the whole glyph area */
+.line-review-dual {
+  outline: 1px solid rgba(255, 255, 255, 0.15) !important;
+  outline-offset: -1px !important;
+}
+
+/* Blue outline on glyph when lines are selected in the editor */
 .line-review-dot-selected {
   outline: 2px solid #4a9eff !important;
   outline-offset: -1px !important;
-  border-radius: 3px !important;
 }
 
 /* =============================================================
