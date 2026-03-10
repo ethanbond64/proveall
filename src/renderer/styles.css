@@ -1416,7 +1416,72 @@ body {
   color: #f48771;
 }
 
-/* Line Review Dot Glyph Margin Styles */
+/* =============================================================
+   Dual-Column Glyph Margin Styles (Before dot + New dot)
+   Each line gets a glyphMarginClassName like:
+     "line-review-dual before-green new-grey"
+   CSS renders two dots side-by-side via ::before and ::after.
+   ============================================================= */
+
+.line-review-dual {
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.line-review-dual::before,
+.line-review-dual::after {
+  content: '' !important;
+  display: inline-block !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+/* Before dot (::before) is slightly smaller / lower opacity to visually subordinate it */
+.line-review-dual::before {
+  width: 7px !important;
+  height: 7px !important;
+  opacity: 0.7 !important;
+}
+
+/* Before dot colors */
+.before-green::before  { background-color: #4caf50 !important; }
+.before-yellow::before { background-color: #ffc107 !important; }
+.before-red::before    { background-color: #f44336 !important; }
+.before-none::before   { background-color: transparent !important; border-color: transparent !important; }
+
+/* New dot colors */
+.new-green::after  { background-color: #4caf50 !important; }
+.new-yellow::after { background-color: #ffc107 !important; }
+.new-red::after    { background-color: #f44336 !important; }
+.new-grey::after   { background-color: #999999 !important; }
+
+/* Hover: brighten the new dot slightly */
+.line-review-dual:hover::after {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Blue outline on glyph dots when lines are selected in the editor */
+.line-review-dot-selected {
+  outline: 2px solid #4a9eff !important;
+  outline-offset: -1px !important;
+  border-radius: 3px !important;
+}
+
+/* =============================================================
+   Single-dot styles (used by ReviewPopup buttons, not glyph margin)
+   ============================================================= */
 .line-review-dot-red,
 .line-review-dot-yellow,
 .line-review-dot-green,
@@ -1455,37 +1520,6 @@ body {
 
 .line-review-dot-unreviewed-required {
   background-color: #999999 !important;
-}
-
-.line-review-dot-red:hover {
-  background-color: #f44336 !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.line-review-dot-unreviewed:hover {
-  background-color: #888888 !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
-}
-
-.line-review-dot-unreviewed-required:hover {
-  background-color: #aaaaaa !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
-}
-
-/* Blue outline on glyph dots when lines are selected in the editor */
-.line-review-dot-selected {
-  border: 2px solid #4a9eff !important;
-  border-radius: 50% !important;
-}
-
-.line-review-dot-yellow:hover {
-  background-color: #ffc107 !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.line-review-dot-green:hover {
-  background-color: #4caf50 !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Commit Review Component */
