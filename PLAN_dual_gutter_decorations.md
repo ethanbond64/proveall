@@ -2,9 +2,9 @@
 
 ## Summary
 
-Replace the single-column gutter dots with two columns:
-- **Left column ("Before")**: Shows the review state from the previous commit/event, aligned to the **original (left-side)** editor line numbers.
-- **Right column ("New")**: Shows the new review state the user is building in this session, aligned to the **modified (right-side)** editor line numbers.
+Replace the single-column gutter dots with two columns, **both in the center gutter** (the modified/right-side editor's glyph margin area):
+- **Left dot ("Before")**: Shows the review state from the previous commit/event. Uses Monaco's line-mapping to determine which original-side lines correspond to each modified-side line.
+- **Right dot ("New")**: Shows the new review state the user is building in this session.
 
 Then add modal prompting when a user approves a line that previously had outstanding issues.
 
@@ -12,21 +12,20 @@ Then add modal prompting when a user approves a line that previously had outstan
 
 ## Key Findings from Codebase Investigation
 
-1. **Backend `line_summary` only contains data for lines that were explicitly reviewed** — it stores `{start, end, state, issue_id}` entries from `CompositeFileReviewState.summary_metadata`. Lines not covered by any entry have no prior state (i.e., they are implicitly "green" / never-reviewed).
+1. **Backend `line_summary` only contains data for lines that were explicitly reviewed** — it stores `{start, end, state, issue_id}` entries from `CompositeFileReviewState.summary_metadata`. Lines not covered by any entry have no prior state (i.e., they are implicitly "green" / never-reviewed). **The backend stores review state using original-side (pre-diff) line numbers.**
 
-2. **`changeBlocks` currently only stores modified-side line numbers** (`modifiedStartLineNumber`, `modifiedEndLineNumber`). We will also need original-side line numbers for the "Before" column.
+2. **Monaco's `getLineChanges()` returns both sides**: `originalStartLineNumber`, `originalEndLineNumber`, `modifiedStartLineNumber`, `modifiedEndLineNumber`. We can use this to map original-side `lineSummary` entries to modified-side line numbers for unchanged lines, so both dot columns render in the center gutter.
 
-3. **Monaco's `getLineChanges()` already returns both sides**: `originalStartLineNumber`, `originalEndLineNumber`, `modifiedStartLineNumber`, `modifiedEndLineNumber`. We just need to capture and pass through the original-side numbers too.
+3. **Both dot columns live on the modified (right-side) editor's glyph margin.** Monaco's `glyphMarginClassName` supports multiple CSS classes, so we can render two dots per line using CSS (e.g., a container with two inline-block circles via `::before` and `::after` pseudo-elements, or two stacked glyph margin classes).
 
-4. **The hook currently decorates only the modified editor** (`diffEditor.getModifiedEditor()`). For the "Before" column, we'll need to also decorate the **original editor** (`diffEditor.getOriginalEditor()`).
-
-5. **`lineSummary` line numbers from the backend correspond to the state at the HEAD of the branch context** (i.e., the cumulative review state). These need to be mapped to original-side line numbers for the "Before" column.
+4. **Default states differ by column:**
+   - **Before column**: Green for lines with no prior review state (assumed approved).
+   - **New column**: Grey/empty for lines that are **in a diff hunk** (unreviewed). For lines **not in a diff hunk**, carry forward the prior state from the Before column.
 
 <!-- TODO: Confirm with Ethan — do the lineSummary line numbers from the backend correspond to
-     the file content at the HEAD event's commit? Or at some other ref? This matters for mapping
-     them to the original-side editor. My assumption is they correspond to the content at the
-     commit that was reviewed (the HEAD event's commit), which would be the "original" side
-     content when reviewing a new commit on top of it. -->
+     the file content at the HEAD event's commit? Or at some other ref? My assumption is they
+     correspond to the content at the commit that was reviewed (the HEAD event's commit), which
+     would be the "original" side content when reviewing a new commit on top of it. -->
 
 <!-- TODO: Confirm — when reviewing a range of commits (not just one), should the "Before"
      column show the state from the commit just before the range, or from the earliest commit
@@ -37,12 +36,13 @@ Then add modal prompting when a user approves a line that previously had outstan
 
 ## Part 1: Dual-Column Gutter UI (No Prompting Logic)
 
-### Step 1.1: Capture original-side change blocks in DiffEditor
+Both dot columns render in the **center gutter** — the modified (right-side) editor's glyph margin. Each line gets a single `glyphMarginClassName` that encodes both states, and CSS renders two dots side-by-side using pseudo-elements.
+
+### Step 1.1: Capture full line-change data in DiffEditor
 
 **File:** `src/renderer/pages/review/editor/DiffEditor.jsx`
 
-- In `computeChangeBlocks()`, also capture `originalStartLineNumber` and `originalEndLineNumber` from `getLineChanges()`.
-- Store them alongside modified blocks, e.g.:
+- In `computeChangeBlocks()`, capture both sides from `getLineChanges()`:
   ```js
   blocks.push({
     startLine: change.modifiedStartLineNumber,
@@ -51,113 +51,117 @@ Then add modal prompting when a user approves a line that previously had outstan
     originalEndLine: change.originalEndLineNumber,
   });
   ```
-- Pass the original editor ref (`diffEditor.getOriginalEditor()`) down alongside the modified editor ref.
+- Store the raw `lineChanges` array (or the enriched blocks) so the line-mapping utility can use it.
 
-### Step 1.2: Expose the original editor from DiffEditor
-
-**File:** `src/renderer/pages/review/editor/DiffEditor.jsx`
-
-- Add a new ref: `originalEditorRef` alongside `modifiedEditorRef`.
-- Set it in the content update effect: `originalEditorRef.current = diffEditorRef.current.getOriginalEditor();`
-- The "Before" decorations hook will need this editor instance.
-
-### Step 1.3: Create `useBeforeDecorations` hook (left-column / original editor)
-
-**New file:** `src/renderer/pages/review/editor/useBeforeDecorations.js`
-
-This hook decorates the **original (left-side) editor** with read-only dots representing the prior review state.
-
-**Inputs:**
-- `editor` — the original editor instance
-- `lineSummary` — the backend-provided `{start, end, state, issue_id}[]` from the previous event
-- `changeBlocks` — with original-side line numbers (to know which lines are in the diff)
-
-**Behavior:**
-- For each line in the original editor:
-  - If covered by a `lineSummary` entry → show that state's color dot
-  - If NOT covered by any entry → show **green** dot (default: no outstanding issues)
-- These dots are **read-only** (no click handling, no selection highlight)
-- Hover message: `"Previous review: {state}"` or `"No previous review (assumed approved)"`
-
-**CSS classes:** Reuse existing `line-review-dot-{red,yellow,green}` classes. Add a subtle visual distinction (e.g., slightly smaller or with lower opacity) to differentiate "Before" dots from "New" dots — via a wrapper class like `before-dot`.
-
-### Step 1.4: Update `useLineReviewDecorations` for right-column behavior
-
-**File:** `src/renderer/pages/review/editor/useLineReviewDecorations.js`
-
-Modify the existing decoration logic for the **modified (right-side) editor**:
-
-**New default behavior for non-diff, non-reviewed lines:**
-- Currently: gray dot (`line-review-dot-unreviewed`) or no dot
-- **New:** Green dot if the line has no prior state, OR carry forward the prior state's color if the line existed before and had a non-green review.
-
-<!-- TODO: To "carry forward" prior state for non-diff lines, we need to map original-side
-     lineSummary entries to modified-side line numbers. This requires using the line change
-     mappings from getLineChanges() to compute the offset. Lines that are unchanged between
-     original and modified will have a direct 1:1 mapping (adjusted for insertions/deletions
-     above them). Need to build a line-number translation function. -->
-
-**Updated priority for the right column:**
-1. **Explicitly reviewed in this session** → show that state's color
-2. **In diff hunk, not yet reviewed** → `unreviewed-required` (gray, interactive) — same as current
-3. **Not in diff hunk, has prior state from lineSummary (mapped to modified line numbers)** → carry forward that color (read-only unless user clicks to re-review)
-4. **Not in diff hunk, no prior state** → green dot
-
-**New input needed:** `lineSummary` (from backend) and the line-number mapping from original→modified side.
-
-### Step 1.5: Build line-number translation utility
+### Step 1.2: Build line-number translation utility
 
 **New file:** `src/renderer/utils/lineMapping.js`
 
-Given Monaco's `lineChanges` array (from `getLineChanges()`), build a function that maps an original-side line number to a modified-side line number (and vice versa). This handles:
-- Lines before any diff hunk: offset = 0
-- Lines between hunks: offset = cumulative inserted - deleted lines from prior hunks
-- Lines within a hunk: no direct mapping (line was changed)
+Uses the `lineChanges` from Monaco's diff editor to map original-side line numbers to modified-side line numbers for **unchanged lines only** (lines within a diff hunk have no 1:1 mapping).
 
 ```js
 export function buildLineMapping(lineChanges) {
   // Returns { originalToModified(line), modifiedToOriginal(line) }
+  // For unchanged lines: computes cumulative offset from insertions/deletions in prior hunks
+  // For lines within a hunk: returns null (no mapping — line was changed)
 }
 ```
 
-### Step 1.6: Pass `lineSummary` and original editor to hooks
+This is used to map `lineSummary` entries (which use original-side line numbers) to modified-side line numbers so the "Before" dot can be placed on the correct modified-editor line.
+
+### Step 1.3: Update `useLineReviewDecorations` for dual-dot rendering
+
+**File:** `src/renderer/pages/review/editor/useLineReviewDecorations.js`
+
+**New inputs:** `lineSummary`, `lineChanges` (or precomputed line mapping)
+
+For each line in the modified editor, compute **two states**:
+
+**Before state** (left dot):
+- Use `modifiedToOriginal(line)` to find the corresponding original line
+- If that original line is covered by a `lineSummary` entry → use that state
+- If that original line exists but has no `lineSummary` entry → green (assumed approved)
+- If the line is new (added in diff, no original counterpart) → no before dot / empty
+
+**New state** (right dot):
+1. **Explicitly reviewed in this session** → show that state's color
+2. **In diff hunk, not yet reviewed** → grey/empty (`unreviewed-required`)
+3. **Not in diff hunk, not explicitly reviewed** → carry forward the Before state (prior state persists until user reviews)
+
+**Decoration approach:** Apply a single `glyphMarginClassName` per line that encodes both states:
+```
+line-review-dual before-{green|yellow|red|none} new-{green|yellow|red|grey}
+```
+CSS will render the two dots via pseudo-elements (see Step 1.5).
+
+### Step 1.4: Pass `lineSummary` and `lineChanges` to the hook
 
 **File:** `src/renderer/pages/review/editor/DiffEditor.jsx`
 
-- Pass `lineSummary` from `openFiles.get(path)` down to both hooks.
-- Instantiate `useBeforeDecorations(originalEditorRef.current, lineSummary, changeBlocks)`.
-- Pass `lineSummary` and line mapping to the updated `useLineReviewDecorations`.
+- Pass `lineSummary` from the open file data to the hook.
+- Pass the `lineChanges` array (captured from `diffEditor.getLineChanges()` / `onDidUpdateDiff`) to the hook so it can build the line mapping internally.
+- No need to expose the original editor ref — everything renders on the modified editor.
 
-### Step 1.7: CSS updates for dual-column appearance
+### Step 1.5: CSS for dual-dot rendering
 
 **File:** `src/renderer/styles.css`
 
-- Ensure both editors in the diff view have `glyphMargin: true` (original editor may need this explicitly).
-- Add `.before-dot` modifier class: slightly reduced opacity (0.7) or size to visually distinguish from the active "New" column.
-- The two columns are naturally separated because they live on different editors (original vs modified) in side-by-side mode.
+Replace single-dot glyph styles with a dual-dot approach. The `glyphMarginClassName` container uses `::before` (left/before dot) and `::after` (right/new dot):
 
-<!-- TODO: In inline diff mode (not side-by-side), both columns would need to appear on the
-     same editor. This is significantly more complex with Monaco's glyph margin (only one
-     glyph per line). Options:
-     1. Disable dual dots in inline mode (just show new-state dots)
-     2. Use margin decorations instead of glyph decorations for one column
-     3. Force side-by-side mode when dual dots are active
-     Recommend option 3 (force side-by-side) for simplicity. -->
+```css
+/* Base container for dual dots */
+.line-review-dual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
 
-### Step 1.8: Handle the `glyphMargin` on the original editor
+.line-review-dual::before,
+.line-review-dual::after {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
 
-**File:** `src/renderer/pages/review/editor/DiffEditor.jsx`
+/* Before dot colors (::before) */
+.before-green::before { background-color: #4caf50; }
+.before-yellow::before { background-color: #ffc107; }
+.before-red::before { background-color: #f44336; }
+.before-none::before { background-color: transparent; border-color: transparent; }
 
-Monaco diff editor's original side may not have `glyphMargin` enabled by default. Check and ensure:
-```js
-const diffEditor = monaco.editor.createDiffEditor(containerRef.current, {
-  // ... existing options ...
-  originalEditable: false,
-  // The original editor options may need to be set separately:
-});
-// After creation:
-diffEditor.getOriginalEditor().updateOptions({ glyphMargin: true });
+/* New dot colors (::after) */
+.new-green::after { background-color: #4caf50; }
+.new-yellow::after { background-color: #ffc107; }
+.new-red::after { background-color: #f44336; }
+.new-grey::after { background-color: #666666; }
 ```
+
+- The before dot should be slightly smaller or lower opacity to visually subordinate it.
+- Selection highlight (`.line-review-dot-selected`) applies a blue outline around the whole container.
+
+<!-- TODO: Monaco's glyph margin renders each className as an absolutely-positioned div.
+     Need to verify that flexbox/pseudo-elements actually work inside Monaco's glyph margin
+     containers. If not, alternative approaches:
+     1. Use two separate decoration layers (glyphMarginClassName + marginClassName)
+     2. Use a background-image approach with two colored circles as a data URI or gradient
+     3. Use a custom ViewZone or overlay widget
+     Prototype this early in implementation. -->
+
+### Step 1.6: Handle inline diff mode
+
+<!-- TODO: In inline diff mode (not side-by-side), the modified editor shows both old and new
+     lines interleaved. The dual-dot approach still works (both dots on the modified editor),
+     but the "Before" dot mapping may behave differently since deleted lines appear inline.
+     Options:
+     1. Force side-by-side mode when dual dots are active
+     2. Adjust mapping logic for inline mode
+     Recommend option 1 for initial implementation. -->
 
 ---
 
@@ -276,7 +280,6 @@ The `lineSummary` data is already available in `openFiles.get(path)` in the Revi
 |------|--------|------|
 | `src/renderer/pages/review/editor/DiffEditor.jsx` | Modify | 1 |
 | `src/renderer/pages/review/editor/useLineReviewDecorations.js` | Modify | 1 & 2 |
-| `src/renderer/pages/review/editor/useBeforeDecorations.js` | **Create** | 1 |
 | `src/renderer/utils/lineMapping.js` | **Create** | 1 |
 | `src/renderer/styles.css` | Modify | 1 & 2 |
 | `src/renderer/pages/review/components/ReviewPopup.jsx` | Modify | 2 |
@@ -290,6 +293,6 @@ The `lineSummary` data is already available in `openFiles.get(path)` in the Revi
 
 2. **"Earliest commit in range" clarification**: When reviewing bulk commits, does "before" mean the state from before the entire range, or from the first commit in the range?
 
-3. **Inline diff mode**: Should we force side-by-side mode when dual dots are active, or attempt to show both columns in inline mode? (Recommended: force side-by-side.)
+3. **Monaco glyph margin CSS feasibility**: Can Monaco's `glyphMarginClassName` divs support flexbox + pseudo-elements for dual dots? Needs early prototyping — fallback approaches listed in Step 1.5 TODO.
 
 4. **Partial range splitting**: When a user approves a range but chooses "Maintain" for some issues within it, we need range-splitting logic. Confirm this is the desired behavior vs. simpler alternatives (e.g., all-or-nothing per range).
