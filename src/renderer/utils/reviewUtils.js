@@ -19,3 +19,13 @@ export function isApproved(state) {
 export function hasIssues(state) {
   return state !== 'green';
 }
+
+/// Base-branch merge that is auto-reviewed (no conflict resolutions to inspect).
+export function isAutoMerge(event) {
+  return event.is_base_merge && !event.has_conflict_changes;
+}
+
+/// Base-branch merge with conflict resolutions that require manual review.
+export function isConflictedMerge(event) {
+  return event.is_base_merge && event.has_conflict_changes;
+}

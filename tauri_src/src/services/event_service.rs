@@ -7,6 +7,7 @@ use diesel::Connection;
 use crate::commands::event_commands::{CreateEventResponse, NewIssueInput};
 use crate::db::schema::{branch_context, issues};
 use crate::error::AppError;
+use crate::models::branch_context::BranchContext;
 use crate::models::composite_file_review_state::{
     NewCompositeFileReviewState, ReviewSummaryMetadataEntry,
 };
@@ -18,7 +19,7 @@ use crate::repositories::{
     branch_context_repo, composite_file_review_state_repo, event_issue_composite_xref_repo,
     event_repo, issue_repo, project_repo, review_repo,
 };
-use crate::utils::git::{diff_changed_files, run_git};
+use crate::utils::git::{self, diff_changed_files};
 
 pub fn create_event(
     conn: &mut SqliteConnection,
@@ -84,7 +85,7 @@ fn create_event_inner(
             previous_event.as_ref(),
             &resolved_issues,
             path,
-            branch_context_id,
+            &branch_context,
         )?
     } else {
         previous_event
@@ -128,6 +129,7 @@ fn create_event_inner(
                 project_path: path,
                 commit: &commit,
                 branch_context_id,
+                skip_file_translation: false,
             },
         )?;
     }
@@ -161,17 +163,15 @@ fn create_intermediate_events(
     previous_event: Option<&crate::models::event::Event>,
     resolved_issues: &[String],
     project_path: &str,
-    branch_context_id: &str,
+    branch_context: &BranchContext,
 ) -> Result<Option<crate::models::event::Event>, AppError> {
-    let branch_context = branch_context_repo::get(conn, branch_context_id)?;
+    let base_branch = &branch_context.base_branch;
 
     let base_commit_owned: Option<String> = match previous_event {
         Some(prev) => prev.hash.clone(),
         None => {
             // First review on this branch — use the HEAD of the base branch as the starting point
-            run_git(project_path, &["rev-parse", &branch_context.base_branch])
-                .ok()
-                .map(|o| o.stdout.trim().to_string())
+            git::rev_parse(project_path, &branch_context.base_branch).ok()
         }
     };
 
@@ -181,45 +181,42 @@ fn create_intermediate_events(
 
     // Enumerate commits in the range (newest first)
     let range = format!("{}..{}", base_commit, target_commit);
-    let log_output = run_git(project_path, &["log", "--format=%H", &range])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-
-    let all_hashes: Vec<&str> = log_output.lines().filter(|l| !l.is_empty()).collect();
+    let all_commits = git::log(project_path, &[&range]).unwrap_or_default();
 
     // Remove the target commit (first in the list) and reverse to chronological order
-    let intermediate_hashes: Vec<&str> = all_hashes
+    let intermediate_commits: Vec<_> = all_commits
         .iter()
-        .filter(|h| **h != target_commit)
-        .copied()
+        .filter(|c| c.hash != target_commit)
         .rev()
         .collect();
 
-    if intermediate_hashes.is_empty() {
+    if intermediate_commits.is_empty() {
         return Ok(previous_event.cloned());
     }
 
     // Create intermediate events in chronological order, propagating xrefs through each
     let mut current_prev_event: Option<crate::models::event::Event> = previous_event.cloned();
 
-    for hash in intermediate_hashes {
-        let summary = run_git(project_path, &["log", "-1", "--format=%s", hash])
-            .map(|o| o.stdout.trim().to_string())
-            .unwrap_or_default();
-
+    for commit in intermediate_commits {
         let intermediate_event = event_repo::create(
             conn,
             NewEvent::new(
                 project_id.to_string(),
                 "commit".to_string(),
-                Some(hash.to_string()),
-                summary,
+                Some(commit.hash.clone()),
+                commit.subject.clone(),
             ),
         )?;
 
         // Only propagate xrefs if there is a previous event to propagate from
         if let Some(ref prev) = current_prev_event {
-            let prev_commit = prev.hash.as_deref().unwrap_or(hash);
+            let prev_commit = prev.hash.as_deref().unwrap_or(&commit.hash);
+
+            // Base-branch merges skip file translation — their file changes are from
+            // the base branch, not feature work
+            let is_base_merge = commit.parents.len() > 1
+                && git::is_base_branch_merge(project_path, &commit.parents, base_branch);
+
             propagate_previous_xrefs(
                 conn,
                 PropagateXrefsParams {
@@ -229,8 +226,9 @@ fn create_intermediate_events(
                     prev_commit,
                     resolved_issues,
                     project_path,
-                    commit: hash,
-                    branch_context_id,
+                    commit: &commit.hash,
+                    branch_context_id: branch_context.id.as_str(),
+                    skip_file_translation: is_base_merge,
                 },
             )?;
         }
@@ -256,8 +254,10 @@ fn build_event_summary(
             .collect();
         serde_json::to_string(&comments).unwrap_or_default()
     } else {
-        run_git(project_path, &["log", "-1", "--format=%s", commit])
-            .map(|o| o.stdout.trim().to_string())
+        git::log(project_path, &["-1", commit])
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .map(|c| c.subject)
             .unwrap_or_default()
     }
 }
@@ -324,33 +324,36 @@ fn create_composite_with_xref(
     Ok(())
 }
 
-struct PropagateXrefsParams<'a> {
-    project_id: &'a str,
-    new_event_id: &'a str,
-    prev_event_id: &'a str,
-    prev_commit: &'a str,
-    resolved_issues: &'a [String],
-    project_path: &'a str,
-    commit: &'a str,
-    branch_context_id: &'a str,
+pub(crate) struct PropagateXrefsParams<'a> {
+    pub(crate) project_id: &'a str,
+    pub(crate) new_event_id: &'a str,
+    pub(crate) prev_event_id: &'a str,
+    pub(crate) prev_commit: &'a str,
+    pub(crate) resolved_issues: &'a [String],
+    pub(crate) project_path: &'a str,
+    pub(crate) commit: &'a str,
+    pub(crate) branch_context_id: &'a str,
+    pub(crate) skip_file_translation: bool,
 }
 
-fn propagate_previous_xrefs(
+pub(crate) fn propagate_previous_xrefs(
     conn: &mut SqliteConnection,
     params: PropagateXrefsParams,
 ) -> Result<(), AppError> {
     let resolved_set: HashSet<&str> = params.resolved_issues.iter().map(|s| s.as_str()).collect();
 
-    let touched_file_paths: HashSet<String> = if params.prev_commit == params.commit {
-        // Same commit (e.g. resolution events) — no file changes to translate
-        HashSet::new()
-    } else {
-        diff_changed_files(params.project_path, &[params.prev_commit, params.commit])
-            .unwrap_or_default()
-            .into_iter()
-            .map(|f| f.path)
-            .collect()
-    };
+    let touched_file_paths: HashSet<String> =
+        if params.skip_file_translation || params.prev_commit == params.commit {
+            // skip_file_translation: base-branch merge — reuse composites without line translation
+            // Same commit (e.g. resolution events) — no file changes to translate
+            HashSet::new()
+        } else {
+            diff_changed_files(params.project_path, &[params.prev_commit, params.commit])
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| f.path)
+                .collect()
+        };
 
     let prev_xrefs_with_composites = event_issue_composite_xref_repo::join_list_by_event(
         conn,
@@ -448,11 +451,8 @@ fn translate_composite_line_numbers(
     current_commit: &str,
     file_path: &str,
 ) -> String {
-    let diff_output = match run_git(
-        project_path,
-        &["diff", prev_commit, current_commit, "--", file_path],
-    ) {
-        Ok(o) => o.stdout,
+    let diff_output = match git::diff_file(project_path, prev_commit, current_commit, file_path) {
+        Ok(o) => o,
         Err(_) => return prev_summary_metadata.to_string(),
     };
 

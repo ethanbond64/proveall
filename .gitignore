@@ -19,3 +19,6 @@ tauri_src/target
 *.db-shm
 *.db-wal
 tauri_src/.env
+
+# Manual testing
+/tmp/

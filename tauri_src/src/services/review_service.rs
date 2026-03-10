@@ -14,11 +14,15 @@ use crate::models::composite_file_review_state::ReviewSummaryMetadataEntry;
 use crate::repositories::{
     branch_context_repo, event_issue_composite_xref_repo, event_repo, issue_repo, project_repo,
 };
-use crate::utils::git::{diff_changed_files, run_git};
+use crate::utils::git::{self, diff_changed_files};
+
+#[cfg(test)]
+mod tests;
 
 enum ReviewType {
     Commit,
     Branch,
+    MergeReview,
 }
 
 impl ReviewType {
@@ -26,6 +30,7 @@ impl ReviewType {
         match s {
             "commit" => Ok(ReviewType::Commit),
             "branch" => Ok(ReviewType::Branch),
+            "merge_review" => Ok(ReviewType::MergeReview),
             _ => Err(AppError::NotFound(format!("Unknown review type: {}", s))),
         }
     }
@@ -55,7 +60,7 @@ pub fn get_review_file_system_data(
                 &branch_context.base_branch,
             )?;
             (
-                build_commit_touched_files(path, &commit, &base_ref)?,
+                build_commit_touched_files(path, &commit, &base_ref, &branch_context.base_branch)?,
                 build_issues_from_event(
                     conn,
                     branch_context.head_event_id.as_deref(),
@@ -74,6 +79,15 @@ pub fn get_review_file_system_data(
                 issue_id,
             )?,
             build_issues_from_event(conn, event_id, None, branch_context_id)?,
+        ),
+        ReviewType::MergeReview => (
+            build_merge_review_touched_files(path, &commit)?,
+            build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                None,
+                branch_context_id,
+            )?,
         ),
     };
 
@@ -104,16 +118,67 @@ fn build_commit_touched_files(
     project_path: &str,
     commit: &str,
     base_ref: &str,
+    base_branch: &str,
 ) -> Result<Vec<TouchedFile>, AppError> {
     let diff_files = diff_changed_files(project_path, &[base_ref, commit])?;
 
+    // Enumerate first-parent commits in the range to find base-branch merges.
+    // Only files exclusively introduced by base-branch merges (and not conflict
+    // resolutions) are marked merge_only. Everything else stays normal.
+    let range = format!("{}..{}", base_ref, commit);
+    let commits = git::log(project_path, &["--first-parent", &range]).unwrap_or_default();
+
+    // Collect files that were introduced only via base-branch merges.
+    // A file is merge_only if it appears in a base-merge diff but NOT in any
+    // non-merge commit diff and NOT as a conflict resolution file.
+    let mut merge_introduced_files: HashSet<String> = HashSet::new();
+    let mut non_merge_files: HashSet<String> = HashSet::new();
+
+    for c in &commits {
+        let is_merge = c.parents.len() > 1;
+        let is_base_merge =
+            is_merge && git::is_base_branch_merge(project_path, &c.parents, base_branch);
+
+        if is_base_merge {
+            // Conflict resolution files are NOT merge_only — add to non_merge_files
+            if let Ok(cc_output) = git::diff_tree_cc_name_only(project_path, &c.hash) {
+                for line in cc_output.lines().filter(|l| !l.is_empty()) {
+                    non_merge_files.insert(line.to_string());
+                }
+            }
+
+            // All files changed by this merge (diff first-parent vs merge commit)
+            if let Some(parent) = c.parents.first() {
+                if let Ok(files) = diff_changed_files(project_path, &[parent, &c.hash]) {
+                    for f in files {
+                        merge_introduced_files.insert(f.path);
+                    }
+                }
+            }
+        } else {
+            // Non-merge commit: all its files are non-merge
+            if let Some(parent) = c.parents.first() {
+                if let Ok(files) = diff_changed_files(project_path, &[parent, &c.hash]) {
+                    for f in files {
+                        non_merge_files.insert(f.path);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(diff_files
         .into_iter()
-        .map(|f| TouchedFile {
-            name: extract_file_name(&f.path),
-            path: f.path,
-            diff_mode: Some(f.status),
-            state: "red".to_string(),
+        .map(|f| {
+            let merge_only =
+                merge_introduced_files.contains(&f.path) && !non_merge_files.contains(&f.path);
+            TouchedFile {
+                name: extract_file_name(&f.path),
+                path: f.path,
+                diff_mode: Some(f.status),
+                state: "red".to_string(),
+                merge_only,
+            }
         })
         .collect())
 }
@@ -170,9 +235,55 @@ fn build_branch_touched_files(
                 path: f.path,
                 diff_mode: Some(f.status),
                 state,
+                merge_only: false,
             }
         })
         .collect())
+}
+
+/// Build touched files for merge review.
+/// Conflict resolution files (from `git diff-tree --cc`) are included as normal files.
+/// All other files introduced by the merge (diff against first parent) are included
+/// as `merge_only: true` so the frontend can show them in a separate section.
+fn build_merge_review_touched_files(
+    project_path: &str,
+    commit: &str,
+) -> Result<Vec<TouchedFile>, AppError> {
+    let cc_output = git::diff_tree_cc_name_only(project_path, commit)?;
+    let conflict_files: HashSet<String> = cc_output
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    let mut touched_files: Vec<TouchedFile> = conflict_files
+        .iter()
+        .map(|file_path| TouchedFile {
+            name: extract_file_name(file_path),
+            path: file_path.clone(),
+            diff_mode: Some("M".to_string()),
+            state: "red".to_string(),
+            merge_only: false,
+        })
+        .collect();
+
+    // Also include non-conflict files from the merge (diff first parent vs merge commit)
+    let first_parent = format!("{}^1", commit);
+    if let Ok(all_merge_files) = diff_changed_files(project_path, &[&first_parent, commit]) {
+        for f in all_merge_files {
+            if !conflict_files.contains(&f.path) {
+                touched_files.push(TouchedFile {
+                    name: extract_file_name(&f.path),
+                    path: f.path,
+                    diff_mode: Some(f.status),
+                    state: "red".to_string(),
+                    merge_only: true,
+                });
+            }
+        }
+    }
+
+    Ok(touched_files)
 }
 
 fn extract_file_name(file_path: &str) -> String {
@@ -205,9 +316,7 @@ pub fn get_review_file_data(
 
     // Content: file at the commit (same for all review types)
     let ref_path = format!("{}:{}", commit, file_path);
-    let content = run_git(path, &["show", &ref_path])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
+    let content = git::show(path, &ref_path).unwrap_or_default();
 
     let (diff, line_summary, issues) = match review_type {
         ReviewType::Commit => {
@@ -217,11 +326,7 @@ pub fn get_review_file_data(
                 &branch_context.base_branch,
             )?;
             let base_file_ref = format!("{}:{}", base_ref, file_path);
-            let diff = Some(
-                run_git(path, &["show", &base_file_ref])
-                    .map(|o| o.stdout)
-                    .unwrap_or_default(),
-            );
+            let diff = Some(git::show(path, &base_file_ref).unwrap_or_default());
             let line_summary = build_branch_line_summary(
                 conn,
                 branch_context.head_event_id.as_deref(),
@@ -239,15 +344,31 @@ pub fn get_review_file_data(
         }
         ReviewType::Branch => {
             let base_ref = format!("{}:{}", branch_context.base_branch, file_path);
-            let diff = Some(
-                run_git(path, &["show", &base_ref])
-                    .map(|o| o.stdout)
-                    .unwrap_or_default(),
-            );
+            let diff = Some(git::show(path, &base_ref).unwrap_or_default());
             let line_summary =
                 build_branch_line_summary(conn, event_id, &file_path, branch_context_id, issue_id)?;
             let issues =
                 build_issues_from_event(conn, event_id, Some(&file_path), branch_context_id)?;
+            (diff, line_summary, issues)
+        }
+        ReviewType::MergeReview => {
+            // For merge review, show the first parent's version as the "before" (feature branch
+            // before the merge) so the user sees only what the conflict resolution changed.
+            let first_parent_ref = format!("{}^1:{}", commit, file_path);
+            let diff = Some(git::show(path, &first_parent_ref).unwrap_or_default());
+            let line_summary = build_branch_line_summary(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                &file_path,
+                branch_context_id,
+                None,
+            )?;
+            let issues = build_issues_from_event(
+                conn,
+                branch_context.head_event_id.as_deref(),
+                Some(&file_path),
+                branch_context_id,
+            )?;
             (diff, line_summary, issues)
         }
     };

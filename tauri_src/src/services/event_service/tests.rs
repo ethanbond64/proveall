@@ -1,54 +1,11 @@
 use super::*;
 use crate::commands::event_commands::{NewIssueInput, NewIssueReviewInput};
-use crate::models::branch_context::NewBranchContext;
 use crate::models::composite_file_review_state::ReviewSummaryMetadataEntry;
-use crate::models::project::NewProject;
-use diesel_migrations::MigrationHarness;
+use crate::test_utils::{setup_db_records, setup_git_repo, test_conn};
 use std::process::Command;
 use tempfile::TempDir;
 
-/// Create an in-memory SQLite connection with all migrations applied.
-fn test_conn() -> SqliteConnection {
-    let mut conn =
-        SqliteConnection::establish(":memory:").expect("Failed to create in-memory connection");
-    diesel::sql_query("PRAGMA foreign_keys = ON")
-        .execute(&mut conn)
-        .ok();
-    conn.run_pending_migrations(crate::db::connection::MIGRATIONS)
-        .expect("Failed to run migrations");
-    conn
-}
-
-/// Create a temporary git repo with an initial commit and return the TempDir and base commit hash.
-fn setup_git_repo() -> (TempDir, String) {
-    let dir = TempDir::new().expect("Failed to create temp dir");
-    let path = dir.path();
-
-    let git = |args: &[&str]| {
-        Command::new("git")
-            .args(args)
-            .current_dir(path)
-            .output()
-            .expect("git command failed")
-    };
-
-    git(&["init", "-b", "main"]);
-    git(&["config", "user.email", "test@test.com"]);
-    git(&["config", "user.name", "Test"]);
-
-    // Create initial commit on main
-    std::fs::write(path.join("file.txt"), "line1\n").unwrap();
-    git(&["add", "."]);
-    git(&["commit", "-m", "initial"]);
-
-    // Get the initial commit hash
-    let output = git(&["rev-parse", "HEAD"]);
-    let base_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    (dir, base_hash)
-}
-
-/// Add a commit to the repo and return its hash.
+/// Write a specific file, stage all, commit, and return the hash.
 fn add_commit(dir: &TempDir, filename: &str, content: &str, message: &str) -> String {
     let path = dir.path();
     std::fs::write(path.join(filename), content).unwrap();
@@ -70,28 +27,6 @@ fn add_commit(dir: &TempDir, filename: &str, content: &str, message: &str) -> St
         .output()
         .unwrap();
     String::from_utf8_lossy(&output.stdout).trim().to_string()
-}
-
-/// Set up project and branch context in the DB. Returns (project_id, branch_context_id).
-fn setup_db_records(conn: &mut SqliteConnection, repo_path: &str) -> (String, String) {
-    let project = project_repo::create(
-        conn,
-        NewProject::new(repo_path.to_string(), Some("test".to_string())),
-    )
-    .expect("Failed to create project");
-
-    let bc = branch_context_repo::create(
-        conn,
-        NewBranchContext::new(
-            project.id.clone(),
-            "main".to_string(),
-            "main".to_string(),
-            "{}".to_string(),
-        ),
-    )
-    .expect("Failed to create branch context");
-
-    (project.id, bc.id)
 }
 
 #[test]
@@ -434,33 +369,19 @@ fn test_first_review_on_branch_with_multiple_commits_creates_intermediates() {
     );
 
     // Set up project and branch context with base_branch = main
-    let project = project_repo::create(
-        &mut conn,
-        NewProject::new(repo_path.to_string(), Some("test".to_string())),
-    )
-    .expect("Failed to create project");
-
-    let bc = branch_context_repo::create(
-        &mut conn,
-        NewBranchContext::new(
-            project.id.clone(),
-            "feature".to_string(),
-            "main".to_string(),
-            "{}".to_string(),
-        ),
-    )
-    .expect("Failed to create branch context");
+    let (project_id, bc_id) =
+        crate::test_utils::setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // First review ever on this branch — target c3 directly (no previous event)
     // This should create intermediate events for c1 and c2
     let result = create_event(
         &mut conn,
-        &project.id,
+        &project_id,
         c3.clone(),
         "commit".to_string(),
         vec![],
         vec![],
-        &bc.id,
+        &bc_id,
     )
     .expect("Failed to create first bulk event on branch");
 
@@ -492,7 +413,7 @@ fn test_first_review_on_branch_with_multiple_commits_creates_intermediates() {
     assert_eq!(c3_events.len(), 1, "Expected exactly 1 event for c3");
 
     // head_event_id should point to the target (c3) event
-    let bc_updated = branch_context_repo::get(&mut conn, &bc.id).unwrap();
+    let bc_updated = branch_context_repo::get(&mut conn, &bc_id).unwrap();
     assert_eq!(bc_updated.head_event_id, Some(result.id));
 }
 

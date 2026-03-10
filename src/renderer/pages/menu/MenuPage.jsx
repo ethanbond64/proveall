@@ -4,6 +4,14 @@ import logoImage from '../../Square310x310Logo.png';
 
 function MenuPage({ onProjectSelected }) {
   const [recentProjects, setRecentProjects] = useState([]);
+  const [openMenuProjectId, setOpenMenuProjectId] = useState(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenuProjectId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   // Load recent projects on mount
   useEffect(() => {
@@ -47,6 +55,32 @@ function MenuPage({ onProjectSelected }) {
                 <div className="recent-project-info">
                   <div className="recent-project-name">{project.name}</div>
                   <div className="recent-project-path">{project.path}</div>
+                </div>
+                <div className="recent-project-menu-container">
+                  <button
+                    className="recent-project-menu-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuProjectId(openMenuProjectId === project.id ? null : project.id);
+                    }}
+                  >
+                    ...
+                  </button>
+                  {openMenuProjectId === project.id && (
+                    <div className="recent-project-menu-popup">
+                      <button
+                        className="recent-project-menu-popup-item delete"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await window.backendAPI.deleteProject(project.id);
+                          setOpenMenuProjectId(null);
+                          setRecentProjects(await window.backendAPI.projectsFetch(5));
+                        }}
+                      >
+                        Delete Project
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
