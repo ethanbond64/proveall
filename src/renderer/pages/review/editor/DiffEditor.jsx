@@ -36,6 +36,7 @@ function DiffEditor({
   filename,
   path,
   lineReviews,
+  lineSummary,
   readOnly = false
 }) {
   const context = useReviewContext();
@@ -175,7 +176,9 @@ function DiffEditor({
     changeBlocks,
     lineReviews,
     !readOnly, // isInteractive
-    path
+    path,
+    lineSummary,
+    lineChanges
   );
 
   const toggleViewMode = () => {

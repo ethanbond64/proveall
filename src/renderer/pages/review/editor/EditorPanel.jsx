@@ -157,6 +157,7 @@ function EditorPanel({ selectedFile, onActiveFileChange = (_) => {} }) {
                   filename={activeTab.fileName}
                   path={activeTab.relativePath}
                   lineReviews={fileReviews}
+                  lineSummary={fileData.lineSummary}
                   readOnly={!isInteractiveReviewMode(context.mode)}
                 />
               ) : (
