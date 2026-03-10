@@ -104,24 +104,6 @@ pub fn diff_file(
         .stdout)
 }
 
-/// `git add -A` — stage all changes.
-pub fn add_all(project_path: &str) -> Result<(), AppError> {
-    run_git(project_path, &["add", "-A"])?;
-    Ok(())
-}
-
-/// `git status --porcelain` — machine-readable status.
-pub fn status_porcelain(project_path: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["status", "--porcelain"])?
-        .stdout)
-}
-
-/// `git commit -m <message>`.
-pub fn commit(project_path: &str, message: &str) -> Result<(), AppError> {
-    run_git(project_path, &["commit", "-m", message])?;
-    Ok(())
-}
-
 /// `git merge-base --is-ancestor <ancestor> <descendant>` — returns true if ancestor
 /// is an ancestor of descendant.
 pub fn is_ancestor(project_path: &str, ancestor: &str, descendant: &str) -> bool {
