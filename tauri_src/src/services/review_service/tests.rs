@@ -1049,3 +1049,91 @@ fn test_branch_file_data_issue_filter_returns_only_matching_line_summary() {
     // issues field is NOT filtered by issue_id — it returns all issues for the file
     assert_eq!(result.issues.len(), 2);
 }
+
+// ---------------------------------------------------------------------------
+// Merge review mode: merge-only files should be included
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_merge_review_includes_non_conflict_files_as_merge_only() {
+    // When a conflicted merge is the ONLY commit in the range (merge_review mode),
+    // the conflict resolution files should appear as normal (merge_only: false),
+    // and all other files brought in by the merge should appear as merge_only: true.
+    let mut conn = test_conn();
+    let (dir, _base_hash) = setup_git_repo();
+    let repo_path = dir.path().to_str().unwrap();
+
+    setup_feature_branch(&dir);
+    let (project_id, bc_id) =
+        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+
+    // Modify base.txt on feature to set up a conflict
+    std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
+    let c1 = git_commit(&dir, "modify base.txt on feature");
+
+    // Review c1 so head_event_id is set
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
+
+    // On main: modify base.txt (conflict) AND add several other files
+    git_checkout(&dir, "main");
+    std::fs::write(dir.path().join("base.txt"), "main version\n").unwrap();
+    std::fs::write(dir.path().join("main_file_1.txt"), "content1\n").unwrap();
+    std::fs::write(dir.path().join("main_file_2.txt"), "content2\n").unwrap();
+    std::fs::write(dir.path().join("main_file_3.txt"), "content3\n").unwrap();
+    git_commit(&dir, "main: modify base.txt and add files");
+
+    // Back to feature, merge main (creates conflict on base.txt)
+    git_checkout(&dir, "feature");
+    let merge_hash = git_merge_with_conflict(&dir, "main");
+
+    // Use merge_review mode (this is what happens when the conflicted merge is the only commit)
+    let result = get_review_file_system_data(
+        &mut conn,
+        &project_id,
+        merge_hash,
+        None,
+        "merge_review".to_string(),
+        &bc_id,
+    )
+    .unwrap();
+
+    // base.txt is a conflict resolution file → should be present with merge_only: false
+    let base_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "base.txt")
+        .expect("base.txt (conflict file) should be in touched files");
+    assert!(
+        !base_file.merge_only,
+        "conflict resolution file should not be merge_only"
+    );
+
+    // The other files from main should be present with merge_only: true
+    for name in &["main_file_1.txt", "main_file_2.txt", "main_file_3.txt"] {
+        let f = result
+            .touched_files
+            .iter()
+            .find(|f| f.path == *name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} should be in touched files (merge-only section), but found: {:?}",
+                    name,
+                    result.touched_files.iter().map(|f| &f.path).collect::<Vec<_>>()
+                )
+            });
+        assert!(
+            f.merge_only,
+            "{} should be merge_only since it was only introduced by the merge",
+            name
+        );
+    }
+}
