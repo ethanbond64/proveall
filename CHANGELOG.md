@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Merge commits which came from the base branch are auto approved when merged without conflicts
 - Separates files with conflicts from ones without in the filetree for merge commits with conflicts and bulk commit ranges containing any type merge commit
 
+### Fixed
+- Prompts for restart on update install to complete the update process.
 
 ## [0.6.0] - 2026-03-08
 
