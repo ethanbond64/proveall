@@ -176,12 +176,16 @@ function App() {
       {/* Restart Modal */}
       {updateReady && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px' }}>
-            <h3>Update Ready</h3>
-            <p>Version {updateInfo?.version} has been downloaded and installed. Restart the app to apply the update.</p>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button className="update-banner-btn dismiss" onClick={() => setUpdateReady(false)}>Later</button>
-              <button className="update-banner-btn" onClick={() => relaunch()}>Restart Now</button>
+          <div className="modal-container update-modal">
+            <div className="modal-header">
+              <h2>Update Ready</h2>
+            </div>
+            <div className="modal-body">
+              <p>Version {updateInfo?.version} has been downloaded and installed. Restart the app to apply the update.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setUpdateReady(false)}>Later</button>
+              <button className="btn-primary" onClick={() => relaunch()}>Restart Now</button>
             </div>
           </div>
         </div>
