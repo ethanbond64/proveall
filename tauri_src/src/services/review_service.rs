@@ -241,25 +241,49 @@ fn build_branch_touched_files(
         .collect())
 }
 
-/// Build touched files for merge review — only files with conflict resolution changes.
-/// Uses `git diff-tree --cc --name-only` which lists only files where the merge commit
-/// differs from ALL parents (i.e., conflict resolutions).
+/// Build touched files for merge review.
+/// Conflict resolution files (from `git diff-tree --cc`) are included as normal files.
+/// All other files introduced by the merge (diff against first parent) are included
+/// as `merge_only: true` so the frontend can show them in a separate section.
 fn build_merge_review_touched_files(
     project_path: &str,
     commit: &str,
 ) -> Result<Vec<TouchedFile>, AppError> {
-    let output = git::diff_tree_cc_name_only(project_path, commit)?;
-    Ok(output
+    let cc_output = git::diff_tree_cc_name_only(project_path, commit)?;
+    let conflict_files: HashSet<String> = cc_output
         .lines()
         .filter(|l| !l.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    let mut touched_files: Vec<TouchedFile> = conflict_files
+        .iter()
         .map(|file_path| TouchedFile {
             name: extract_file_name(file_path),
-            path: file_path.to_string(),
+            path: file_path.clone(),
             diff_mode: Some("M".to_string()),
             state: "red".to_string(),
             merge_only: false,
         })
-        .collect())
+        .collect();
+
+    // Also include non-conflict files from the merge (diff first parent vs merge commit)
+    let first_parent = format!("{}^1", commit);
+    if let Ok(all_merge_files) = diff_changed_files(project_path, &[&first_parent, commit]) {
+        for f in all_merge_files {
+            if !conflict_files.contains(&f.path) {
+                touched_files.push(TouchedFile {
+                    name: extract_file_name(&f.path),
+                    path: f.path,
+                    diff_mode: Some(f.status),
+                    state: "red".to_string(),
+                    merge_only: true,
+                });
+            }
+        }
+    }
+
+    Ok(touched_files)
 }
 
 fn extract_file_name(file_path: &str) -> String {
