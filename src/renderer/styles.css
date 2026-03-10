@@ -1420,57 +1420,49 @@ body {
    Dual-Column Glyph Margin Styles (Before dot + New dot)
    Each line gets a glyphMarginClassName like:
      "line-review-dual before-green new-grey"
-   CSS renders two dots side-by-side via ::before and ::after.
+   Uses background-image with radial-gradient to paint two dots
+   directly onto Monaco's absolutely-positioned glyph margin div.
    ============================================================= */
 
 .line-review-dual {
   cursor: pointer !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 2px !important;
-  width: 100% !important;
-  height: 100% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  box-sizing: border-box !important;
+  background-repeat: no-repeat !important;
 }
 
-.line-review-dual::before,
-.line-review-dual::after {
-  content: '' !important;
-  display: inline-block !important;
-  width: 8px !important;
-  height: 8px !important;
-  border-radius: 50% !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-sizing: border-box !important;
-  flex-shrink: 0 !important;
-}
+/* --- Before dot (left, smaller/dimmer) --- */
+.before-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%) !important; }
+.before-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%) !important; }
+.before-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%) !important; }
+.before-none   { background-image: none !important; }
 
-/* Before dot (::before) is slightly smaller / lower opacity to visually subordinate it */
-.line-review-dual::before {
-  width: 7px !important;
-  height: 7px !important;
-  opacity: 0.7 !important;
-}
+/* --- New dot (right, primary) + Before dot combined ---
+   CSS background-image stacks: first value is on top.
+   We put the "new" dot second so both render via comma-separated gradients.
+   Re-declare combined backgrounds per before×new combination. */
 
-/* Before dot colors */
-.before-green::before  { background-color: #4caf50 !important; }
-.before-yellow::before { background-color: #ffc107 !important; }
-.before-red::before    { background-color: #f44336 !important; }
-.before-none::before   { background-color: transparent !important; border-color: transparent !important; }
+/* before-green combinations */
+.before-green.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
+.before-green.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
+.before-green.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
+.before-green.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(76, 175, 80, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
 
-/* New dot colors */
-.new-green::after  { background-color: #4caf50 !important; }
-.new-yellow::after { background-color: #ffc107 !important; }
-.new-red::after    { background-color: #f44336 !important; }
-.new-grey::after   { background-color: #999999 !important; }
+/* before-yellow combinations */
+.before-yellow.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
+.before-yellow.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
+.before-yellow.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
+.before-yellow.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(255, 193, 7, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
 
-/* Hover: brighten the new dot slightly */
-.line-review-dual:hover::after {
-  border-color: rgba(255, 255, 255, 0.4) !important;
-}
+/* before-red combinations */
+.before-red.new-green  { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
+.before-red.new-yellow { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
+.before-red.new-red    { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
+.before-red.new-grey   { background-image: radial-gradient(circle 3px at 30% 50%, rgba(244, 67, 54, 0.7) 60%, transparent 61%), radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
+
+/* before-none: only show the new dot (right side) */
+.before-none.new-green  { background-image: radial-gradient(circle 4px at 70% 50%, #4caf50 60%, transparent 61%) !important; }
+.before-none.new-yellow { background-image: radial-gradient(circle 4px at 70% 50%, #ffc107 60%, transparent 61%) !important; }
+.before-none.new-red    { background-image: radial-gradient(circle 4px at 70% 50%, #f44336 60%, transparent 61%) !important; }
+.before-none.new-grey   { background-image: radial-gradient(circle 4px at 70% 50%, #999999 60%, transparent 61%) !important; }
 
 /* Blue outline on glyph dots when lines are selected in the editor */
 .line-review-dot-selected {
