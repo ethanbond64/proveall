@@ -7,6 +7,7 @@ import BranchContextModal from './components/BranchContextModal';
 import TerminalDrawer from './components/TerminalDrawer';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
 import { checkForUpdate } from './utils/updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import './styles.css';
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
   const lastUpdateCheck = useRef(0);
 
   const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -44,6 +46,8 @@ function App() {
       if (settings.auto_update) {
         setUpdateInstalling(true);
         await result.download();
+        setUpdateInstalling(false);
+        setUpdateReady(true);
       }
     } catch (e) {
       console.error('Auto-update failed:', e);
@@ -143,6 +147,8 @@ function App() {
     setUpdateInstalling(true);
     try {
       await updateInfo.download();
+      setUpdateInstalling(false);
+      setUpdateReady(true);
     } catch (e) {
       console.error('Update install failed:', e);
       setUpdateInstalling(false);
@@ -164,6 +170,24 @@ function App() {
               <button className="update-banner-btn dismiss" onClick={() => setUpdateDismissed(true)}>Dismiss</button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Restart Modal */}
+      {updateReady && (
+        <div className="modal-overlay">
+          <div className="modal-container update-modal">
+            <div className="modal-header">
+              <h2>Update Ready</h2>
+            </div>
+            <div className="modal-body">
+              <p>Version {updateInfo?.version} has been downloaded and installed. Restart the app to apply the update.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setUpdateReady(false)}>Later</button>
+              <button className="btn-primary" onClick={() => relaunch()}>Restart Now</button>
+            </div>
+          </div>
         </div>
       )}
 
