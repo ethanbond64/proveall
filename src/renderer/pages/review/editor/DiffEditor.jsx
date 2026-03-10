@@ -43,7 +43,7 @@ function DiffEditor({
   const diffEditorRef = useRef(null);
   const containerRef = useRef(null);
   const modifiedEditorRef = useRef(null);
-  const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const renderSideBySide = true;
   const [changeBlocks, setChangeBlocks] = useState([]);
   const [lineChanges, setLineChanges] = useState(null);
 
@@ -81,14 +81,6 @@ function DiffEditor({
     };
   }, [readOnly]); // Remove renderSideBySide from dependencies
 
-  // Update renderSideBySide option when it changes
-  useEffect(() => {
-    if (!diffEditorRef.current) return;
-
-    diffEditorRef.current.updateOptions({
-      renderSideBySide: renderSideBySide
-    });
-  }, [renderSideBySide]);
 
   // Update models when content changes
   useEffect(() => {
@@ -181,17 +173,8 @@ function DiffEditor({
     lineChanges
   );
 
-  const toggleViewMode = () => {
-    setRenderSideBySide(!renderSideBySide);
-  };
-
   return (
     <div className="diff-editor-container">
-      <div className="diff-editor-toolbar">
-        <button onClick={toggleViewMode} className="diff-view-toggle-btn">
-          {renderSideBySide ? 'Inline View' : 'Split View'}
-        </button>
-      </div>
       <div ref={containerRef} className="diff-editor-monaco-container" />
 
       {/* Render the line review popup when state is set */}
