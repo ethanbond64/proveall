@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as monaco from 'monaco-editor';
-import { buildLineMapping } from '../../utils/lineMapping';
+import { buildLineMapping } from '../../../utils/lineMapping.js';
 
 
 /**
