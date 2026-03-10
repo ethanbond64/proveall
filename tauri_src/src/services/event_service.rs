@@ -85,7 +85,7 @@ fn create_event_inner(
             previous_event.as_ref(),
             &resolved_issues,
             path,
-            &branch_context
+            &branch_context,
         )?
     } else {
         previous_event

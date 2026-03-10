@@ -120,7 +120,13 @@ pub fn setup_feature_branch(dir: &TempDir) {
 /// Returns the merge commit hash.
 pub fn git_merge(dir: &TempDir, branch: &str) -> String {
     Command::new("git")
-        .args(["merge", "--no-ff", branch, "-m", &format!("Merge {} into HEAD", branch)])
+        .args([
+            "merge",
+            "--no-ff",
+            branch,
+            "-m",
+            &format!("Merge {} into HEAD", branch),
+        ])
         .current_dir(dir.path())
         .output()
         .unwrap();
@@ -141,7 +147,13 @@ pub fn git_checkout(dir: &TempDir, branch: &str) {
 /// Returns the merge commit hash.
 pub fn git_merge_with_conflict(dir: &TempDir, branch: &str) -> String {
     let output = Command::new("git")
-        .args(["merge", "--no-ff", branch, "-m", &format!("Merge {} (conflict)", branch)])
+        .args([
+            "merge",
+            "--no-ff",
+            branch,
+            "-m",
+            &format!("Merge {} (conflict)", branch),
+        ])
         .current_dir(dir.path())
         .output()
         .unwrap();

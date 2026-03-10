@@ -43,8 +43,7 @@ fn test_feature_branch_diff_summary_added_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Add a new file on the feature branch
     std::fs::write(dir.path().join("new.txt"), "hello\nworld\n").unwrap();
@@ -68,8 +67,7 @@ fn test_feature_branch_diff_summary_modified_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Modify base.txt (replace "base\n" with "modified\nextra\n")
     std::fs::write(dir.path().join("base.txt"), "modified\nextra\n").unwrap();
@@ -92,8 +90,7 @@ fn test_feature_branch_diff_summary_deleted_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Delete base.txt
     Command::new("git")
@@ -119,8 +116,7 @@ fn test_feature_branch_diff_summary_mixed() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Add a file, modify base.txt, in one commit
     std::fs::write(dir.path().join("added.txt"), "new\n").unwrap();
@@ -145,8 +141,7 @@ fn test_events_include_unreviewed_commits() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Two commits, neither reviewed
     std::fs::write(dir.path().join("a.txt"), "a\n").unwrap();
@@ -160,7 +155,10 @@ fn test_events_include_unreviewed_commits() {
     // Should have 2 event entries (one per commit), both unreviewed (no event id)
     assert_eq!(result.events.len(), 2);
     for entry in &result.events {
-        assert!(entry.id.is_none(), "unreviewed commits should have no event id");
+        assert!(
+            entry.id.is_none(),
+            "unreviewed commits should have no event id"
+        );
         assert_eq!(entry.event_type, "commit");
     }
 }
@@ -172,8 +170,7 @@ fn test_events_include_reviewed_commits() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("a.txt"), "a\n").unwrap();
     let c1 = git_commit(&dir, "feature commit");
@@ -210,8 +207,7 @@ fn test_issues_listed_when_present() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("code.txt"), "a\nb\nc\n").unwrap();
     let c1 = git_commit(&dir, "add code.txt");
@@ -250,8 +246,7 @@ fn test_no_issues_when_none_filed() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("a.txt"), "a\n").unwrap();
     let c1 = git_commit(&dir, "add a.txt");
@@ -302,8 +297,7 @@ fn test_base_merge_shown_in_events() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     let (_c1, merge_hash) = setup_feature_with_base_merge(&dir);
 
@@ -312,9 +306,19 @@ fn test_base_merge_shown_in_events() {
     // Should have 2 entries: merge (newest) and c1 (oldest)
     assert_eq!(result.events.len(), 2);
 
-    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
-    assert!(merge_entry.is_base_merge, "merge commit should be classified as base merge");
-    assert!(!merge_entry.has_conflict_changes, "clean merge should have no conflict changes");
+    let merge_entry = result
+        .events
+        .iter()
+        .find(|e| e.commit == merge_hash)
+        .unwrap();
+    assert!(
+        merge_entry.is_base_merge,
+        "merge commit should be classified as base merge"
+    );
+    assert!(
+        !merge_entry.has_conflict_changes,
+        "clean merge should have no conflict changes"
+    );
 }
 
 #[test]
@@ -323,16 +327,22 @@ fn test_base_merge_not_lazy_created_when_prior_commits_unreviewed() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     let (_c1, merge_hash) = setup_feature_with_base_merge(&dir);
 
     // Don't review c1 — merge event should NOT be lazy-created
     let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
 
-    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
-    assert!(merge_entry.id.is_none(), "merge should not have event when prior commit is unreviewed");
+    let merge_entry = result
+        .events
+        .iter()
+        .find(|e| e.commit == merge_hash)
+        .unwrap();
+    assert!(
+        merge_entry.id.is_none(),
+        "merge should not have event when prior commit is unreviewed"
+    );
 }
 
 #[test]
@@ -341,19 +351,34 @@ fn test_base_merge_lazy_created_when_prior_commits_reviewed() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     let (c1, merge_hash) = setup_feature_with_base_merge(&dir);
 
     // Review c1
-    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // Now get_project_state should lazy-create the merge event
     let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
 
-    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
-    assert!(merge_entry.id.is_some(), "merge event should be lazy-created after prior commit is reviewed");
+    let merge_entry = result
+        .events
+        .iter()
+        .find(|e| e.commit == merge_hash)
+        .unwrap();
+    assert!(
+        merge_entry.id.is_some(),
+        "merge event should be lazy-created after prior commit is reviewed"
+    );
 }
 
 #[test]
@@ -362,21 +387,32 @@ fn test_base_merge_lazy_creation_advances_head_event_id() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     let (c1, merge_hash) = setup_feature_with_base_merge(&dir);
 
     // Review c1
-    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // Trigger lazy creation
     let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
 
-    let merge_event_id = result.events.iter()
+    let merge_event_id = result
+        .events
+        .iter()
         .find(|e| e.commit == merge_hash)
         .unwrap()
-        .id.as_ref()
+        .id
+        .as_ref()
         .expect("merge event should exist");
 
     // head_event_id should now point to the merge event
@@ -393,8 +429,7 @@ fn test_base_merge_lazy_creation_propagates_xrefs() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Feature commit: add feature.txt
     std::fs::write(dir.path().join("feature.txt"), "line1\nline2\nline3\n").unwrap();
@@ -424,9 +459,9 @@ fn test_base_merge_lazy_creation_propagates_xrefs() {
     // Verify xrefs exist on the c1 event
     let bc_before = branch_context_repo::get(&mut conn, &bc_id).unwrap();
     let c1_event_id = bc_before.head_event_id.as_ref().unwrap();
-    let c1_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn, c1_event_id, &bc_id,
-    ).unwrap();
+    let c1_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, c1_event_id, &bc_id)
+            .unwrap();
     assert_eq!(c1_xrefs.len(), 1, "c1 should have exactly one xref");
     let (c1_xref, c1_composite) = &c1_xrefs[0];
     let c1_issue_id = c1_xref.issue_id.clone();
@@ -449,28 +484,54 @@ fn test_base_merge_lazy_creation_propagates_xrefs() {
     let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
 
     // Merge event should be lazy-created
-    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
-    let merge_event_id = merge_entry.id.as_ref().expect("merge event should be lazy-created");
+    let merge_entry = result
+        .events
+        .iter()
+        .find(|e| e.commit == merge_hash)
+        .unwrap();
+    let merge_event_id = merge_entry
+        .id
+        .as_ref()
+        .expect("merge event should be lazy-created");
 
     // Verify xrefs on the merge event
-    let merge_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn, merge_event_id, &bc_id,
-    ).unwrap();
-    assert_eq!(merge_xrefs.len(), 1, "merge event should have exactly one xref (propagated from c1)");
+    let merge_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, merge_event_id, &bc_id)
+            .unwrap();
+    assert_eq!(
+        merge_xrefs.len(),
+        1,
+        "merge event should have exactly one xref (propagated from c1)"
+    );
 
     let (merge_xref, merge_composite) = &merge_xrefs[0];
 
     // Same issue, same file
-    assert_eq!(merge_xref.issue_id, c1_issue_id, "xref should reference the same issue");
-    assert_eq!(merge_composite.relative_file_path, "feature.txt", "xref should reference the same file");
+    assert_eq!(
+        merge_xref.issue_id, c1_issue_id,
+        "xref should reference the same issue"
+    );
+    assert_eq!(
+        merge_composite.relative_file_path, "feature.txt",
+        "xref should reference the same file"
+    );
 
     // Same line range (skip_file_translation=true means no translation)
     let merge_entries: Vec<ReviewSummaryMetadataEntry> =
         serde_json::from_str(&merge_composite.summary_metadata).unwrap();
     assert_eq!(merge_entries.len(), 1);
-    assert_eq!(merge_entries[0].start, 1, "line start should be unchanged across merge");
-    assert_eq!(merge_entries[0].end, 2, "line end should be unchanged across merge");
-    assert_eq!(merge_entries[0].state, "red", "review state should be unchanged across merge");
+    assert_eq!(
+        merge_entries[0].start, 1,
+        "line start should be unchanged across merge"
+    );
+    assert_eq!(
+        merge_entries[0].end, 2,
+        "line end should be unchanged across merge"
+    );
+    assert_eq!(
+        merge_entries[0].state, "red",
+        "review state should be unchanged across merge"
+    );
 }
 
 #[test]
@@ -481,8 +542,7 @@ fn test_base_merge_xrefs_reuse_composite_not_translate() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("feature.txt"), "line1\nline2\nline3\n").unwrap();
     let c1 = git_commit(&dir, "add feature.txt");
@@ -509,9 +569,9 @@ fn test_base_merge_xrefs_reuse_composite_not_translate() {
 
     let bc = branch_context_repo::get(&mut conn, &bc_id).unwrap();
     let c1_event_id = bc.head_event_id.unwrap();
-    let c1_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn, &c1_event_id, &bc_id,
-    ).unwrap();
+    let c1_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, &c1_event_id, &bc_id)
+            .unwrap();
     let c1_composite_id = c1_xrefs[0].0.composite_file_id.clone();
 
     // Merge main (different file) into feature
@@ -526,9 +586,9 @@ fn test_base_merge_xrefs_reuse_composite_not_translate() {
 
     let bc = branch_context_repo::get(&mut conn, &bc_id).unwrap();
     let merge_event_id = bc.head_event_id.unwrap();
-    let merge_xrefs = event_issue_composite_xref_repo::join_list_by_event(
-        &mut conn, &merge_event_id, &bc_id,
-    ).unwrap();
+    let merge_xrefs =
+        event_issue_composite_xref_repo::join_list_by_event(&mut conn, &merge_event_id, &bc_id)
+            .unwrap();
 
     // The composite should be reused (same ID), not a new translated copy
     assert_eq!(
@@ -546,8 +606,7 @@ fn test_base_merge_lazy_creation_issues_visible_in_response() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("code.txt"), "a\nb\nc\n").unwrap();
     let c1 = git_commit(&dir, "add code.txt");
@@ -594,8 +653,7 @@ fn test_conflicted_base_merge_not_lazy_created() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Feature commit
     std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
@@ -609,14 +667,33 @@ fn test_conflicted_base_merge_not_lazy_created() {
     let merge_hash = git_merge_with_conflict(&dir, "main");
 
     // Review c1 — all prior commits now have events
-    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // get_project_state should NOT lazy-create the conflicted merge event
     let result = get_project_state(&mut conn, &project_id, &bc_id).unwrap();
 
-    let merge_entry = result.events.iter().find(|e| e.commit == merge_hash).unwrap();
-    assert!(merge_entry.id.is_none(), "conflicted merge should NOT be lazy-created");
-    assert!(merge_entry.has_conflict_changes, "should have conflict changes");
+    let merge_entry = result
+        .events
+        .iter()
+        .find(|e| e.commit == merge_hash)
+        .unwrap();
+    assert!(
+        merge_entry.id.is_none(),
+        "conflicted merge should NOT be lazy-created"
+    );
+    assert!(
+        merge_entry.has_conflict_changes,
+        "should have conflict changes"
+    );
 }
 
 #[test]
@@ -627,15 +704,23 @@ fn test_multiple_base_merges_lazy_created_in_sequence() {
     let (dir, _) = setup_git_repo();
     let repo_path = dir.path().to_str().unwrap();
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // c1 on feature
     std::fs::write(dir.path().join("f1.txt"), "f1\n").unwrap();
     let c1 = git_commit(&dir, "feature: add f1.txt");
 
     // Review c1
-    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // merge1: merge main into feature
     git_checkout(&dir, "main");
@@ -649,7 +734,16 @@ fn test_multiple_base_merges_lazy_created_in_sequence() {
     let c2 = git_commit(&dir, "feature: add f2.txt");
 
     // Review c2 (this triggers intermediate event creation for merge1 via event_service)
-    create_event(&mut conn, &project_id, c2, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c2,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // merge2: merge main into feature again
     git_checkout(&dir, "main");
@@ -663,7 +757,10 @@ fn test_multiple_base_merges_lazy_created_in_sequence() {
 
     // merge1 should have been created by create_event's intermediate logic
     let merge1_entry = result.events.iter().find(|e| e.commit == merge1).unwrap();
-    assert!(merge1_entry.id.is_some(), "merge1 should have event from intermediate creation");
+    assert!(
+        merge1_entry.id.is_some(),
+        "merge1 should have event from intermediate creation"
+    );
 
     // merge2 should be lazy-created by get_project_state
     let merge2_entry = result.events.iter().find(|e| e.commit == merge2).unwrap();

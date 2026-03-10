@@ -136,8 +136,8 @@ fn build_commit_touched_files(
 
     for c in &commits {
         let is_merge = c.parents.len() > 1;
-        let is_base_merge = is_merge
-            && git::is_base_branch_merge(project_path, &c.parents, base_branch);
+        let is_base_merge =
+            is_merge && git::is_base_branch_merge(project_path, &c.parents, base_branch);
 
         if is_base_merge {
             // Conflict resolution files are NOT merge_only — add to non_merge_files
@@ -170,8 +170,8 @@ fn build_commit_touched_files(
     Ok(diff_files
         .into_iter()
         .map(|f| {
-            let merge_only = merge_introduced_files.contains(&f.path)
-                && !non_merge_files.contains(&f.path);
+            let merge_only =
+                merge_introduced_files.contains(&f.path) && !non_merge_files.contains(&f.path);
             TouchedFile {
                 name: extract_file_name(&f.path),
                 path: f.path,

@@ -37,10 +37,12 @@ fn run_git(project_path: &str, args: &[&str]) -> Result<GitOutput, AppError> {
 
 /// `git rev-parse --abbrev-ref HEAD` — current branch name.
 pub fn current_branch(project_path: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["rev-parse", "--abbrev-ref", "HEAD"])?
-        .stdout
-        .trim()
-        .to_string())
+    Ok(
+        run_git(project_path, &["rev-parse", "--abbrev-ref", "HEAD"])?
+            .stdout
+            .trim()
+            .to_string(),
+    )
 }
 
 /// `git rev-parse <git_ref>` — resolve a ref to a commit hash.
@@ -53,8 +55,7 @@ pub fn rev_parse(project_path: &str, git_ref: &str) -> Result<String, AppError> 
 
 /// `git diff --shortstat <range>` — raw shortstat output.
 pub fn diff_shortstat(project_path: &str, range: &str) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["diff", "--shortstat", range])?
-        .stdout)
+    Ok(run_git(project_path, &["diff", "--shortstat", range])?.stdout)
 }
 
 pub struct GitCommit {
@@ -100,8 +101,7 @@ pub fn diff_file(
     curr: &str,
     file_path: &str,
 ) -> Result<String, AppError> {
-    Ok(run_git(project_path, &["diff", prev, curr, "--", file_path])?
-        .stdout)
+    Ok(run_git(project_path, &["diff", prev, curr, "--", file_path])?.stdout)
 }
 
 /// `git merge-base --is-ancestor <ancestor> <descendant>` — returns true if ancestor
@@ -132,12 +132,7 @@ pub fn is_base_branch_merge(project_path: &str, parents: &[String], base_branch:
 /// After skipping, non-empty output indicates conflict resolution changes.
 pub fn diff_tree_cc(project_path: &str, hash: &str) -> Result<String, AppError> {
     let output = run_git(project_path, &["diff-tree", "--cc", "-p", hash])?;
-    Ok(output
-        .stdout
-        .lines()
-        .skip(1)
-        .collect::<Vec<_>>()
-        .join("\n"))
+    Ok(output.stdout.lines().skip(1).collect::<Vec<_>>().join("\n"))
 }
 
 /// `git diff-tree --cc --name-only <hash>` — list files with conflict changes only.
@@ -145,12 +140,7 @@ pub fn diff_tree_cc(project_path: &str, hash: &str) -> Result<String, AppError> 
 pub fn diff_tree_cc_name_only(project_path: &str, hash: &str) -> Result<String, AppError> {
     let output = run_git(project_path, &["diff-tree", "--cc", "--name-only", hash])?;
     // First line is the commit hash — skip it
-    Ok(output
-        .stdout
-        .lines()
-        .skip(1)
-        .collect::<Vec<_>>()
-        .join("\n"))
+    Ok(output.stdout.lines().skip(1).collect::<Vec<_>>().join("\n"))
 }
 
 // ---------------------------------------------------------------------------

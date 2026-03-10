@@ -137,8 +137,8 @@ fn build_event_entries(
         .iter()
         .flat_map(|commit| {
             let is_merge = commit.parents.len() > 1;
-            let is_base_merge = is_merge
-                && git::is_base_branch_merge(path, &commit.parents, base_branch);
+            let is_base_merge =
+                is_merge && git::is_base_branch_merge(path, &commit.parents, base_branch);
             let has_conflict_changes = is_base_merge
                 && git::diff_tree_cc(path, &commit.hash)
                     .map(|output| !output.trim().is_empty())

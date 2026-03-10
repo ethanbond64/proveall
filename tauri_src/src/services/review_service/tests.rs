@@ -388,15 +388,23 @@ fn test_commit_bulk_merge_only_files_separated() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // c1 on feature: add feature.txt
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
     let c1 = git_commit(&dir, "add feature.txt");
 
     // Review c1 so head_event_id is set to a point before main advanced
-    create_event(&mut conn, &project_id, c1, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        c1,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     // c2 on feature: add another file
     std::fs::write(dir.path().join("feature2.txt"), "feature2\n").unwrap();
@@ -421,14 +429,26 @@ fn test_commit_bulk_merge_only_files_separated() {
     .unwrap();
 
     // feature2.txt touched by c2 (normal commit) → merge_only: false
-    let feature2_file = result.touched_files.iter().find(|f| f.path == "feature2.txt")
+    let feature2_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "feature2.txt")
         .expect("feature2.txt should be in touched files");
-    assert!(!feature2_file.merge_only, "feature2.txt is from a normal commit");
+    assert!(
+        !feature2_file.merge_only,
+        "feature2.txt is from a normal commit"
+    );
 
     // main_only.txt only touched by the merge → merge_only: true
-    let main_file = result.touched_files.iter().find(|f| f.path == "main_only.txt")
+    let main_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "main_only.txt")
         .expect("main_only.txt should be in touched files");
-    assert!(main_file.merge_only, "main_only.txt is only from a merge commit");
+    assert!(
+        main_file.merge_only,
+        "main_only.txt is only from a merge commit"
+    );
 }
 
 #[test]
@@ -439,8 +459,7 @@ fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // c1 on feature: modify base.txt
     std::fs::write(dir.path().join("base.txt"), "feature change\n").unwrap();
@@ -465,9 +484,15 @@ fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
     .unwrap();
 
     // base.txt is touched by c1 (normal) AND the merge — should NOT be merge_only
-    let base_file = result.touched_files.iter().find(|f| f.path == "base.txt")
+    let base_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "base.txt")
         .expect("base.txt should be in touched files");
-    assert!(!base_file.merge_only, "base.txt is touched by a normal commit too");
+    assert!(
+        !base_file.merge_only,
+        "base.txt is touched by a normal commit too"
+    );
 }
 
 #[test]
@@ -478,8 +503,7 @@ fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // c1 on feature: add a separate file
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
@@ -507,9 +531,15 @@ fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
     .unwrap();
 
     // base.txt has conflict changes → should NOT be merge_only
-    let base_file = result.touched_files.iter().find(|f| f.path == "base.txt")
+    let base_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "base.txt")
         .expect("base.txt should be in touched files");
-    assert!(!base_file.merge_only, "conflict resolution files should not be merge_only");
+    assert!(
+        !base_file.merge_only,
+        "conflict resolution files should not be merge_only"
+    );
 }
 
 #[test]
@@ -521,7 +551,16 @@ fn test_commit_single_no_merge_all_files_normal() {
     let (project_id, bc_id) = setup_db_records(&mut conn, repo_path);
 
     // Review base commit
-    create_event(&mut conn, &project_id, base_hash, "commit".to_string(), vec![], vec![], &bc_id).unwrap();
+    create_event(
+        &mut conn,
+        &project_id,
+        base_hash,
+        "commit".to_string(),
+        vec![],
+        vec![],
+        &bc_id,
+    )
+    .unwrap();
 
     std::fs::write(dir.path().join("new.txt"), "hello\n").unwrap();
     let c1 = git_commit(&dir, "add new.txt");
@@ -537,7 +576,11 @@ fn test_commit_single_no_merge_all_files_normal() {
     .unwrap();
 
     for f in &result.touched_files {
-        assert!(!f.merge_only, "file {} should not be merge_only in single commit", f.path);
+        assert!(
+            !f.merge_only,
+            "file {} should not be merge_only in single commit",
+            f.path
+        );
     }
 }
 
@@ -550,8 +593,7 @@ fn test_commit_first_on_feature_branch_no_merge_only() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // First commit on feature — no prior reviews, no head_event_id
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
@@ -567,9 +609,16 @@ fn test_commit_first_on_feature_branch_no_merge_only() {
     )
     .unwrap();
 
-    assert!(!result.touched_files.is_empty(), "should have touched files");
+    assert!(
+        !result.touched_files.is_empty(),
+        "should have touched files"
+    );
     for f in &result.touched_files {
-        assert!(!f.merge_only, "file {} should not be merge_only on first feature commit", f.path);
+        assert!(
+            !f.merge_only,
+            "file {} should not be merge_only on first feature commit",
+            f.path
+        );
     }
 }
 
@@ -582,8 +631,7 @@ fn test_commit_non_base_merge_files_not_merge_only() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Make a commit on feature so "other" branch diverges from feature, not main
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
@@ -613,9 +661,15 @@ fn test_commit_non_base_merge_files_not_merge_only() {
     .unwrap();
 
     // other.txt comes from a non-base merge → should NOT be merge_only
-    let other_file = result.touched_files.iter().find(|f| f.path == "other.txt")
+    let other_file = result
+        .touched_files
+        .iter()
+        .find(|f| f.path == "other.txt")
         .expect("other.txt should be in touched files");
-    assert!(!other_file.merge_only, "non-base-merge files should not be merge_only");
+    assert!(
+        !other_file.merge_only,
+        "non-base-merge files should not be merge_only"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -629,8 +683,7 @@ fn test_branch_file_system_data_added_modified_deleted() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Commit 1: add a new file and modify base.txt
     std::fs::write(dir.path().join("base.txt"), "modified on feature\n").unwrap();
@@ -833,8 +886,7 @@ fn test_branch_file_data_added_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("new.txt"), "feature content\n").unwrap();
     let c1 = git_commit(&dir, "add new.txt on feature");
@@ -862,8 +914,7 @@ fn test_branch_file_data_modified_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     std::fs::write(dir.path().join("base.txt"), "changed on feature\n").unwrap();
     let c1 = git_commit(&dir, "modify base.txt on feature");
@@ -892,8 +943,7 @@ fn test_branch_file_data_deleted_file() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     Command::new("git")
         .args(["rm", "base.txt"])
@@ -1064,8 +1114,7 @@ fn test_merge_review_includes_non_conflict_files_as_merge_only() {
     let repo_path = dir.path().to_str().unwrap();
 
     setup_feature_branch(&dir);
-    let (project_id, bc_id) =
-        setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
+    let (project_id, bc_id) = setup_db_records_with_branch(&mut conn, repo_path, "feature", "main");
 
     // Modify base.txt on feature to set up a conflict
     std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
@@ -1127,7 +1176,11 @@ fn test_merge_review_includes_non_conflict_files_as_merge_only() {
                 panic!(
                     "{} should be in touched files (merge-only section), but found: {:?}",
                     name,
-                    result.touched_files.iter().map(|f| &f.path).collect::<Vec<_>>()
+                    result
+                        .touched_files
+                        .iter()
+                        .map(|f| &f.path)
+                        .collect::<Vec<_>>()
                 )
             });
         assert!(
