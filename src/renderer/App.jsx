@@ -6,7 +6,8 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
 import TerminalDrawer from './components/TerminalDrawer';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
-import { checkForUpdate, relaunch } from './utils/updater';
+import { checkForUpdate } from './utils/updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import './styles.css';
 
 function App() {
