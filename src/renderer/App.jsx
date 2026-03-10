@@ -6,7 +6,7 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import BranchContextModal from './components/BranchContextModal';
 import TerminalDrawer from './components/TerminalDrawer';
 import { COMMIT_REVIEW_MODE, BRANCH_COMPARISON_MODE } from './constants';
-import { checkForUpdate } from './utils/updater';
+import { checkForUpdate, relaunch } from './utils/updater';
 import './styles.css';
 
 function App() {
@@ -24,6 +24,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
   const lastUpdateCheck = useRef(0);
 
   const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -44,6 +45,8 @@ function App() {
       if (settings.auto_update) {
         setUpdateInstalling(true);
         await result.download();
+        setUpdateInstalling(false);
+        setUpdateReady(true);
       }
     } catch (e) {
       console.error('Auto-update failed:', e);
@@ -143,6 +146,8 @@ function App() {
     setUpdateInstalling(true);
     try {
       await updateInfo.download();
+      setUpdateInstalling(false);
+      setUpdateReady(true);
     } catch (e) {
       console.error('Update install failed:', e);
       setUpdateInstalling(false);
@@ -164,6 +169,20 @@ function App() {
               <button className="update-banner-btn dismiss" onClick={() => setUpdateDismissed(true)}>Dismiss</button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Restart Modal */}
+      {updateReady && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <h3>Update Ready</h3>
+            <p>Version {updateInfo?.version} has been downloaded and installed. Restart the app to apply the update.</p>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button className="update-banner-btn dismiss" onClick={() => setUpdateReady(false)}>Later</button>
+              <button className="update-banner-btn" onClick={() => relaunch()}>Restart Now</button>
+            </div>
+          </div>
         </div>
       )}
 

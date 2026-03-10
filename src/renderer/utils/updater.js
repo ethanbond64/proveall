@@ -1,4 +1,5 @@
 import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 export async function checkForUpdate() {
   try {
@@ -17,3 +18,5 @@ export async function checkForUpdate() {
     return { available: false };
   }
 }
+
+export { relaunch };
