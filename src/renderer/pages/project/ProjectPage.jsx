@@ -280,7 +280,7 @@ function ProjectPage({ project, projectState, setProjectState, branchContextId, 
                         <div className="commit-next-badge" style={{ color: '#569cd6', backgroundColor: 'rgba(86, 156, 214, 0.15)', borderColor: 'rgba(86, 156, 214, 0.3)' }}>RESOLUTION</div>
                       )}
                       {conflictedMerge && !isReviewed && (
-                        <div className="commit-merge-badge" style={{ color: '#f48771', backgroundColor: 'rgba(244, 135, 113, 0.15)', borderColor: 'rgba(244, 135, 113, 0.3)' }}>REVIEW MERGE</div>
+                        <div className="commit-merge-badge" style={{ color: '#f48771', backgroundColor: 'rgba(244, 135, 113, 0.15)', borderColor: 'rgba(244, 135, 113, 0.3)' }}>MERGE (RESOLVED CONFLICTS)</div>
                       )}
                       {autoMerge && (
                         <div className="commit-merge-badge">MERGE</div>
