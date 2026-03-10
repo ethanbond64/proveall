@@ -44,6 +44,7 @@ function DiffEditor({
   const modifiedEditorRef = useRef(null);
   const [renderSideBySide, setRenderSideBySide] = useState(true);
   const [changeBlocks, setChangeBlocks] = useState([]);
+  const [lineChanges, setLineChanges] = useState(null);
 
   // Store setChangeBlocks action in a ref to avoid re-renders
   const setChangeBlocksRef = useRef(context.actions?.setChangeBlocks);
@@ -130,21 +131,24 @@ function DiffEditor({
     const computeChangeBlocks = () => {
       if (!diffEditorRef.current) return;
 
-      const lineChanges = diffEditorRef.current.getLineChanges();
+      const rawLineChanges = diffEditorRef.current.getLineChanges();
       const blocks = [];
 
-      if (lineChanges) {
-        lineChanges.forEach(change => {
+      if (rawLineChanges) {
+        rawLineChanges.forEach(change => {
           if (change.modifiedStartLineNumber && change.modifiedEndLineNumber) {
             blocks.push({
               startLine: change.modifiedStartLineNumber,
-              endLine: change.modifiedEndLineNumber
+              endLine: change.modifiedEndLineNumber,
+              originalStartLine: change.originalStartLineNumber,
+              originalEndLine: change.originalEndLineNumber,
             });
           }
         });
       }
 
       setChangeBlocks(blocks);
+      setLineChanges(rawLineChanges);
 
       // Report change blocks to context using ref
       if (setChangeBlocksRef.current) {
