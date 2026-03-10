@@ -5,6 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 window.backendAPI = {
   projectsFetch: (limit) => invoke('fetch_projects', {limit}),
   projectsOpen: (path) => invoke('open_project', { path }).then(p => ({ id: p.id })),
+  deleteProject: (projectId) => invoke('delete_project', { projectId }),
 
   getCurrentBranch: (projectId) => invoke('get_current_branch', { projectId }),
   createBranchContext: (projectId, branch, baseBranch, settings = '{}') =>

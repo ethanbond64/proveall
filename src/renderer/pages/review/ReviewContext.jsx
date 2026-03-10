@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useCallback } from 'react';
-import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE} from "../../constants";
+import {BRANCH_COMPARISON_MODE, COMMIT_REVIEW_MODE, isInteractiveReviewMode} from "../../constants";
 import {hasIssues} from "../../utils/reviewUtils";
 
 // Create the context
@@ -8,12 +8,11 @@ const ReviewContext = createContext(null);
 // Initial state structure
 const initialState = {
   // Core State (from getReviewFileSystemData)
-  mode: COMMIT_REVIEW_MODE, // 'commit' | 'branch'
+  mode: COMMIT_REVIEW_MODE, // 'commit' | 'branch' | 'merge_review'
   projectId: null,
   projectPath: '',
   commit: '',
   issueId: null,
-  baseCommit: null,
   branchContextId: null,
 
   // File system state
@@ -66,7 +65,7 @@ const ActionTypes = {
 function reviewReducer(state, action) {
   switch (action.type) {
     case ActionTypes.INITIALIZE: {
-      const { mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId, touchedFiles, issues } = action.payload;
+      const { mode, projectId, projectPath, commit, issueId, branchContextId, touchedFiles, issues } = action.payload;
 
       // Convert arrays to Maps for efficient lookups
       const touchedFilesMap = new Map();
@@ -83,6 +82,19 @@ function reviewReducer(state, action) {
         });
       }
 
+      // Auto-approve merge-only files in interactive modes
+      const fileReviews = new Map(state.session.fileReviews);
+      if (isInteractiveReviewMode(mode)) {
+        touchedFilesMap.forEach((file, path) => {
+          if (file.mergeOnly) {
+            fileReviews.set(path, {
+              ...(fileReviews.get(path) || { lineRanges: [] }),
+              defaultState: 'green',
+            });
+          }
+        });
+      }
+
       return {
         ...state,
         mode,
@@ -90,10 +102,13 @@ function reviewReducer(state, action) {
         projectPath,
         commit,
         issueId,
-        baseCommit,
         branchContextId,
         touchedFiles: touchedFilesMap,
         issues: issuesMap,
+        session: {
+          ...state.session,
+          fileReviews,
+        },
         isLoading: false,
       };
     }
@@ -371,7 +386,7 @@ function reviewReducer(state, action) {
 }
 
 // Provider component
-export function ReviewContextProvider({ children, mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId }) {
+export function ReviewContextProvider({ children, mode, projectId, projectPath, commit, issueId, branchContextId }) {
   const [state, dispatch] = useReducer(reviewReducer, initialState);
 
   // Initialize context with backend data
@@ -388,8 +403,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           commit,
           issueId,
           mode,
-          branchContextId,
-          baseCommit
+          branchContextId
         );
 
         dispatch({
@@ -400,7 +414,6 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
             projectPath,
             commit,
             issueId,
-            baseCommit,
             branchContextId,
             touchedFiles: data?.touchedFiles || [],
             issues: data?.issues || [],
@@ -413,7 +426,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
     };
 
     loadInitialData();
-  }, [mode, projectId, projectPath, commit, issueId, baseCommit, branchContextId]);
+  }, [mode, projectId, projectPath, commit, issueId, branchContextId]);
 
   // Action methods
   const actions = useMemo(() => ({
@@ -425,8 +438,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           issueId,
           state.mode,
           path,
-          branchContextId,
-          state.baseCommit
+          branchContextId
         );
 
         dispatch({
@@ -506,8 +518,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           'resolution',  // eventType
           [],  // newIssues (empty for resolution)
           [issueId],  // resolvedIssues (single issue)
-          state.branchContextId,
-          state.baseCommit
+          state.branchContextId
         );
 
         console.log(`Issue ${issueId} resolved successfully. Event ID: ${eventId}`);
@@ -529,8 +540,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           state.commit,
           state.issueId,
           state.mode,
-          state.branchContextId,
-          state.baseCommit
+          state.branchContextId
         );
 
         dispatch({
@@ -541,7 +551,6 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
             projectPath: state.projectPath,
             commit: state.commit,
             issueId: state.issueId,
-            baseCommit: state.baseCommit,
             branchContextId: state.branchContextId,
             touchedFiles: data?.touchedFiles || [],
             issues: data?.issues || [],
@@ -602,7 +611,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           if (resolvedIssues.length === 0 && newIssues.length === 0) {
             throw new Error('No changes to save for this issue');
           }
-        } else if (state.mode === COMMIT_REVIEW_MODE) {
+        } else if (isInteractiveReviewMode(state.mode)) {
           // In commit mode, we don't enforce validation here
           // The save button should be disabled if not complete
           // This is just a safety check
@@ -620,8 +629,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
           eventType,
           newIssues,
           resolvedIssues,
-          state.branchContextId,
-          state.baseCommit
+          state.branchContextId
         );
 
         // Clear session state after successful save
@@ -634,7 +642,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
         throw error;
       }
     },
-  }), [projectId, commit, issueId, state.mode, state.session, state.projectPath, state.branchContextId, state.baseCommit, branchContextId]);
+  }), [projectId, commit, issueId, state.mode, state.session, state.projectPath, state.branchContextId, branchContextId]);
 
 
   // Computed values
@@ -700,7 +708,7 @@ export function ReviewContextProvider({ children, mode, projectId, projectPath, 
 
     // Check if all files are reviewed (for commit mode)
     const isComplete = (() => {
-      if (state.mode !== COMMIT_REVIEW_MODE) return false;
+      if (!isInteractiveReviewMode(state.mode)) return false;
 
       // Check each file's progress
       for (const [path, progress] of fileProgress) {

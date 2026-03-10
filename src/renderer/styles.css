@@ -1344,6 +1344,66 @@ body {
   white-space: nowrap;
 }
 
+.recent-project-menu-container {
+  position: relative;
+}
+
+.recent-project-menu-btn {
+  background: transparent;
+  border: none;
+  color: #858585;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 3px;
+  transition: background-color 0.2s, color 0.2s;
+  letter-spacing: 1px;
+}
+
+.recent-project-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #cccccc;
+}
+
+.recent-project-menu-popup {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background-color: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  min-width: 150px;
+}
+
+.recent-project-menu-popup-item {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #e0e0e0;
+  font-size: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+
+.recent-project-menu-popup-item:hover {
+  background-color: #37373d;
+}
+
+.recent-project-menu-popup-item.delete {
+  color: #f48771;
+}
+
+.recent-project-menu-popup-item.delete:hover {
+  background-color: rgba(244, 135, 113, 0.1);
+}
+
 .recent-project-remove {
   background: transparent;
   border: none;

@@ -3,7 +3,10 @@ use diesel::prelude::*;
 use serde::Serialize;
 use tauri::State;
 
-use crate::db::schema::projects;
+use crate::db::schema::{
+    branch_context, composite_file_review_state, event_issue_composite_xref, events, issues,
+    projects, reviews,
+};
 use crate::models::branch_context::NewBranchContext;
 use crate::models::project::{NewProject, ProjectLastOpenedUpdate};
 use crate::repositories::{branch_context_repo, project_repo};
@@ -90,6 +93,8 @@ pub struct EventEntry {
     pub author: Option<String>,
     pub message: String,
     pub created_at: String,
+    pub is_base_merge: bool,
+    pub has_conflict_changes: bool,
 }
 
 #[derive(Serialize)]
@@ -150,9 +155,54 @@ pub fn get_current_branch(state: State<DbState>, project_id: String) -> Result<S
     let mut conn = state.0.lock().unwrap();
     let project = project_repo::get(&mut conn, &project_id).map_err(String::from)?;
 
-    // Get current branch using git
-    let output = crate::utils::git::run_git(&project.path, &["rev-parse", "--abbrev-ref", "HEAD"])
-        .map_err(|e| format!("Failed to get current branch: {}", e))?;
+    crate::utils::git::current_branch(&project.path)
+        .map_err(|e| format!("Failed to get current branch: {}", e))
+}
 
-    Ok(output.stdout.trim().to_string())
+#[tauri::command]
+pub fn delete_project(state: State<DbState>, project_id: String) -> Result<(), String> {
+    let mut conn = state.0.lock().unwrap();
+    conn.transaction(|conn| {
+        let project_issue_ids = issues::table
+            .filter(issues::project_id.eq(&project_id))
+            .select(issues::id);
+
+        let project_event_ids = events::table
+            .filter(events::project_id.eq(&project_id))
+            .select(events::id);
+
+        // 1. reviews (via issues)
+        diesel::delete(reviews::table.filter(reviews::issue_id.eq_any(project_issue_ids)))
+            .execute(conn)?;
+
+        // 2. event_issue_composite_xref (via events)
+        diesel::delete(
+            event_issue_composite_xref::table
+                .filter(event_issue_composite_xref::event_id.eq_any(project_event_ids)),
+        )
+        .execute(conn)?;
+
+        // 3. issues
+        diesel::delete(issues::table.filter(issues::project_id.eq(&project_id))).execute(conn)?;
+
+        // 4. branch_context
+        diesel::delete(branch_context::table.filter(branch_context::project_id.eq(&project_id)))
+            .execute(conn)?;
+
+        // 5. composite_file_review_state
+        diesel::delete(
+            composite_file_review_state::table
+                .filter(composite_file_review_state::project_id.eq(&project_id)),
+        )
+        .execute(conn)?;
+
+        // 6. events
+        diesel::delete(events::table.filter(events::project_id.eq(&project_id))).execute(conn)?;
+
+        // 7. projects
+        diesel::delete(projects::table.filter(projects::id.eq(&project_id))).execute(conn)?;
+
+        Ok(())
+    })
+    .map_err(|e: diesel::result::Error| e.to_string())
 }

@@ -110,8 +110,8 @@ function App() {
   };
 
   // Navigate to Review Page with review context
-  const handleNavigateToReview = (commit, mode = COMMIT_REVIEW_MODE, issueId = null, baseCommit = null) => {
-    setReviewContext({ commit, issueId, branchContextId, baseCommit });
+  const handleNavigateToReview = (commit, mode = COMMIT_REVIEW_MODE, issueId = null) => {
+    setReviewContext({ commit, issueId, branchContextId });
     setReviewMode(mode);
     setShowReviewPage(true);
   };
@@ -216,7 +216,6 @@ function App() {
           projectState={projectState}
           commit={reviewContext?.commit}
           issueId={reviewContext?.issueId}
-          baseCommit={reviewContext?.baseCommit}
           reviewMode={reviewMode}
           branchContextId={branchContextId}
           onNavigateBack={handleNavigateBack}

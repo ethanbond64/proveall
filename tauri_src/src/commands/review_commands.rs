@@ -10,6 +10,7 @@ pub struct TouchedFile {
     pub path: String,
     pub diff_mode: Option<String>,
     pub state: String,
+    pub merge_only: bool,
 }
 
 #[derive(Serialize)]
