@@ -21,17 +21,6 @@ Then add modal prompting when a user approves a line that previously had outstan
 4. **Default states differ by column:**
    - **Before column**: Green for lines with no prior review state (assumed approved).
    - **New column**: Grey/empty for lines that are **in a diff hunk** (unreviewed). For lines **not in a diff hunk**, carry forward the prior state from the Before column.
-
-<!-- TODO: Confirm with Ethan — do the lineSummary line numbers from the backend correspond to
-     the file content at the HEAD event's commit? Or at some other ref? My assumption is they
-     correspond to the content at the commit that was reviewed (the HEAD event's commit), which
-     would be the "original" side content when reviewing a new commit on top of it. -->
-
-<!-- TODO: Confirm — when reviewing a range of commits (not just one), should the "Before"
-     column show the state from the commit just before the range, or from the earliest commit
-     in the range? The user said "earliest commit in the range" but that seems like it would
-     show state from BEFORE the range, not from the earliest commit IN the range. Clarify. -->
-
 ---
 
 ## Part 1: Dual-Column Gutter UI (No Prompting Logic)
@@ -232,16 +221,6 @@ For each issue the user addresses:
    - Do NOT resolve the issue
    - Do NOT mark those specific lines green — they carry forward their prior state
    - If the user's selection covered multiple issues and they chose differently for each, the final `updateLineReview` call needs to account for partial ranges
-
-<!-- TODO: The "partial range" scenario is complex. If a user selects lines 10-30 and
-     lines 10-15 had issue A (red) and lines 20-25 had issue B (yellow), and they
-     choose "Resolve" for A but "Maintain" for B, we'd need to:
-     - Mark lines 10-15 green
-     - Mark lines 16-19 green (no prior issues)
-     - Leave lines 20-25 at yellow
-     - Mark lines 26-30 green (no prior issues)
-     This means splitting the original range into sub-ranges based on conflict resolution
-     decisions. Need to implement range-splitting logic. -->
 
 ### Step 2.5: Add `IssueConflictModal` CSS styles
 
