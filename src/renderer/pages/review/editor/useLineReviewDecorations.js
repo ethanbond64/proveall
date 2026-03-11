@@ -16,7 +16,8 @@ export function useLineReviewDecorations(
   isInteractive,
   path,
   lineSummary,
-  lineChanges
+  lineChanges,
+  isBranchMode
 ) {
   const decorationsRef = useRef([]);
   const selectionHighlightRef = useRef([]);
@@ -115,29 +116,31 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Build a map of prior review states from lineSummary (original-side line numbers)
-      // lineSummary entries: { start, end, state, issueRef }
-      const priorReviewOriginal = new Map();
+      // Build a map of prior review states from lineSummary.
+      // In commit mode: original-side line numbers (need mapping).
+      // In branch mode: modified-side line numbers (use directly).
+      const priorReviewMap = new Map();
       if (lineSummary && lineSummary.length > 0) {
         lineSummary.forEach(entry => {
           for (let line = entry.start; line <= entry.end; line++) {
-            priorReviewOriginal.set(line, entry.state);
+            priorReviewMap.set(line, entry.state);
           }
         });
       }
 
       // Helper: get the "before" state for a modified-side line.
-      // Uses approx mapping so modified lines in a hunk still show
-      // the prior review state of the corresponding original line.
       const getBeforeState = (modLine) => {
+        if (isBranchMode) {
+          // In branch mode, the original is the base branch — all lines assumed green.
+          return 'green';
+        }
+        // Commit mode: use approx mapping so modified lines in a hunk
+        // still show the prior review state of the corresponding original line.
         const origLine = mapping.modifiedToOriginalApprox(modLine);
         if (origLine === null) {
-          // Pure insertion — no original line to map to
           return 'none';
         }
-        // Check if this original line had a prior review
-        const priorState = priorReviewOriginal.get(origLine);
-        // Lines with no prior review entry are assumed approved (green)
+        const priorState = priorReviewMap.get(origLine);
         return priorState || 'green';
       };
 
@@ -152,10 +155,17 @@ export function useLineReviewDecorations(
           return lineReviews.defaultState;
         }
 
-        // 3. In diff hunk, not yet reviewed → grey (unreviewed-required)
+        // 3. In branch mode, lineSummary uses modified-side numbers —
+        //    check it directly for the new-state column.
+        if (isBranchMode) {
+          const branchState = priorReviewMap.get(modLine);
+          if (branchState) return branchState;
+        }
+
+        // 4. In diff hunk, not yet reviewed → grey (unreviewed-required)
         if (diffLines.has(modLine)) return 'grey';
 
-        // 4. Not in diff hunk → carry forward the before state
+        // 5. Not in diff hunk → carry forward the before state
         return getBeforeState(modLine);
       };
 
@@ -219,7 +229,7 @@ export function useLineReviewDecorations(
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [lineReviews, changeBlocks, lineSummary, mapping, isInteractive]); // Note: not including editor in deps to avoid re-runs
+  }, [lineReviews, changeBlocks, lineSummary, mapping, isInteractive, isBranchMode]); // Note: not including editor in deps to avoid re-runs
 
   // Highlight glyph dots with blue outline when lines are selected in the editor
   useEffect(() => {
