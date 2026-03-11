@@ -12,6 +12,7 @@ export function buildLineMapping(lineChanges) {
     return {
       originalToModified: (line) => line,
       modifiedToOriginal: (line) => line,
+      modifiedToOriginalApprox: (line) => line,
     };
   }
 
@@ -85,5 +86,41 @@ export function buildLineMapping(lineChanges) {
     return origLine + offset;
   }
 
-  return { originalToModified, modifiedToOriginal };
+  /**
+   * Best-effort mapping from modified-side to original-side, even within hunks.
+   * For unchanged lines: same as modifiedToOriginal.
+   * For lines inside a hunk where both sides have lines (modification):
+   *   maps positionally within the hunk (clamped to the original range).
+   * For pure insertions (no original lines): returns null.
+   * Used by the "before" column to show prior review state on modified lines.
+   */
+  function modifiedToOriginalApprox(modLine) {
+    let offset = 0;
+
+    for (const hunk of hunks) {
+      if (modLine < hunk.modStart) {
+        return modLine + offset;
+      }
+
+      const modHunkSize = Math.max(0, hunk.modEnd - hunk.modStart + 1);
+      const origHunkSize = Math.max(0, hunk.origEnd - hunk.origStart + 1);
+
+      if (hunk.modEnd >= hunk.modStart && modLine >= hunk.modStart && modLine <= hunk.modEnd) {
+        // Inside the hunk on the modified side
+        if (origHunkSize === 0) {
+          // Pure insertion — no original lines to map to
+          return null;
+        }
+        // Positional mapping within the hunk, clamped to original range
+        const posInHunk = modLine - hunk.modStart;
+        return Math.min(hunk.origStart + posInHunk, hunk.origEnd);
+      }
+
+      offset += origHunkSize - modHunkSize;
+    }
+
+    return modLine + offset;
+  }
+
+  return { originalToModified, modifiedToOriginal, modifiedToOriginalApprox };
 }

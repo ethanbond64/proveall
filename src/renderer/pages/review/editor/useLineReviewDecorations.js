@@ -126,11 +126,13 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Helper: get the "before" state for a modified-side line
+      // Helper: get the "before" state for a modified-side line.
+      // Uses approx mapping so modified lines in a hunk still show
+      // the prior review state of the corresponding original line.
       const getBeforeState = (modLine) => {
-        const origLine = mapping.modifiedToOriginal(modLine);
+        const origLine = mapping.modifiedToOriginalApprox(modLine);
         if (origLine === null) {
-          // Line is inside a diff hunk (new/changed line) — no prior counterpart
+          // Pure insertion — no original line to map to
           return 'none';
         }
         // Check if this original line had a prior review
