@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import { useLineReviewDecorations } from './useLineReviewDecorations';
 import { useReviewContext } from '../ReviewContext';
+import { BRANCH_COMPARISON_MODE } from '../../../constants';
 import ReviewPopup from '../components/ReviewPopup';
 
 // Helper function to get language from filename
@@ -170,7 +171,8 @@ function DiffEditor({
     !readOnly, // isInteractive
     path,
     lineSummary,
-    lineChanges
+    lineChanges,
+    context.mode === BRANCH_COMPARISON_MODE
   );
 
   return (
