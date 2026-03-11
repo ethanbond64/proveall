@@ -43,14 +43,15 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
 
   const results = [];
   for (let line = 1; line <= modifiedLineCount; line++) {
-    const origLine = mapping.modifiedToOriginal(line);
+    const origLineApprox = mapping.modifiedToOriginalApprox(line);
 
-    // Before state
+    // Before state — uses approx mapping so modified lines still
+    // show prior review state of their corresponding original line
     let beforeState;
-    if (origLine === null) {
+    if (origLineApprox === null) {
       beforeState = 'none';
     } else {
-      beforeState = priorReviewOriginal.get(origLine) || 'green';
+      beforeState = priorReviewOriginal.get(origLineApprox) || 'green';
     }
 
     // New state
@@ -169,7 +170,7 @@ describe('dual-gutter decoration: insertion before reviewed lines', () => {
     { start: 10, end: 18, state: 'yellow' },
   ];
 
-  it('should NOT show yellow on modified lines 10-18 (those are in the diff hunk or shifted)', () => {
+  it('should show approx before-state for hunk lines and grey new-state', () => {
     const states = computeGutterStates({
       lineChanges,
       lineSummary,
@@ -177,11 +178,12 @@ describe('dual-gutter decoration: insertion before reviewed lines', () => {
       modifiedLineCount: 30,
     });
 
-    // Modified lines 10-19 are inside the diff hunk
+    // Modified lines 10-19 are inside the diff hunk.
+    // Approx mapping: mod 10-14 → orig 10-14 (yellow), mod 15-19 → clamped to orig 14 (yellow)
     for (let l = 10; l <= 19; l++) {
       const s = states.find(s => s.line === l);
-      expect(s.beforeState).toBe('none'); // no original counterpart (in hunk)
-      expect(s.newState).toBe('grey');    // unreviewed diff line
+      expect(s.beforeState).toBe('yellow'); // approx maps to original lines with yellow
+      expect(s.newState).toBe('grey');      // unreviewed diff line
     }
 
     // Modified lines 20-23 correspond to original 15-18 (which are yellow in lineSummary)
@@ -209,6 +211,122 @@ describe('dual-gutter decoration: insertion before reviewed lines', () => {
     for (let l = 1; l <= 9; l++) {
       const s = states.find(s => s.line === l);
       expect(s.beforeState).toBe('green'); // no prior review = assumed green
+      expect(s.newState).toBe('green');
+    }
+  });
+});
+
+describe('modifiedToOriginalApprox', () => {
+  it('returns identity when no changes', () => {
+    const mapping = buildLineMapping([]);
+    expect(mapping.modifiedToOriginalApprox(5)).toBe(5);
+  });
+
+  it('maps positionally within a same-size modification hunk', () => {
+    // Lines 5-7 modified (3→3)
+    const lineChanges = [{
+      originalStartLineNumber: 5,
+      originalEndLineNumber: 7,
+      modifiedStartLineNumber: 5,
+      modifiedEndLineNumber: 7,
+    }];
+    const mapping = buildLineMapping(lineChanges);
+
+    expect(mapping.modifiedToOriginalApprox(4)).toBe(4);
+    expect(mapping.modifiedToOriginalApprox(5)).toBe(5);
+    expect(mapping.modifiedToOriginalApprox(6)).toBe(6);
+    expect(mapping.modifiedToOriginalApprox(7)).toBe(7);
+    expect(mapping.modifiedToOriginalApprox(8)).toBe(8);
+  });
+
+  it('clamps to original range when modified hunk is larger', () => {
+    // Original 5-6 (2 lines) → Modified 5-9 (5 lines)
+    const lineChanges = [{
+      originalStartLineNumber: 5,
+      originalEndLineNumber: 6,
+      modifiedStartLineNumber: 5,
+      modifiedEndLineNumber: 9,
+    }];
+    const mapping = buildLineMapping(lineChanges);
+
+    expect(mapping.modifiedToOriginalApprox(5)).toBe(5); // pos 0 → orig 5
+    expect(mapping.modifiedToOriginalApprox(6)).toBe(6); // pos 1 → orig 6
+    expect(mapping.modifiedToOriginalApprox(7)).toBe(6); // pos 2 → clamped to orig 6
+    expect(mapping.modifiedToOriginalApprox(8)).toBe(6); // clamped
+    expect(mapping.modifiedToOriginalApprox(9)).toBe(6); // clamped
+    expect(mapping.modifiedToOriginalApprox(10)).toBe(7); // after hunk, offset adjusted
+  });
+
+  it('returns null for pure insertions (no original lines)', () => {
+    const lineChanges = [{
+      originalStartLineNumber: 5,
+      originalEndLineNumber: 4, // 0-length original side
+      modifiedStartLineNumber: 5,
+      modifiedEndLineNumber: 9,
+    }];
+    const mapping = buildLineMapping(lineChanges);
+
+    expect(mapping.modifiedToOriginalApprox(4)).toBe(4);
+    expect(mapping.modifiedToOriginalApprox(5)).toBeNull();
+    expect(mapping.modifiedToOriginalApprox(9)).toBeNull();
+    expect(mapping.modifiedToOriginalApprox(10)).toBe(5);
+  });
+});
+
+describe('dual-gutter decoration: single line modification', () => {
+  // Reproduces the reported bug:
+  // - 10-line file, all lines approved (no lineSummary entries → default green)
+  // - Line 1 is modified (e.g. symbol added to imports)
+  // - Monaco reports original line 1 deleted + modified line 1 added
+  // - Expected: before=green on modified line 1 (prior state persists),
+  //   new=grey (needs review)
+  // - Bug: before was 'none' because modifiedToOriginal returned null for hunk lines
+
+  const lineChanges = [{
+    originalStartLineNumber: 1,
+    originalEndLineNumber: 1,
+    modifiedStartLineNumber: 1,
+    modifiedEndLineNumber: 1,
+  }];
+
+  it('should show green before-state for a modified line with no prior issues', () => {
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary: [], // no prior reviews → all green
+      sessionReviews: [],
+      modifiedLineCount: 10,
+    });
+
+    const s1 = states.find(s => s.line === 1);
+    expect(s1.beforeState).toBe('green'); // prior state persists via approx mapping
+    expect(s1.newState).toBe('grey');     // in diff hunk, needs review
+  });
+
+  it('should show yellow before-state for a modified line with prior issue', () => {
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary: [{ start: 1, end: 1, state: 'yellow' }],
+      sessionReviews: [],
+      modifiedLineCount: 10,
+    });
+
+    const s1 = states.find(s => s.line === 1);
+    expect(s1.beforeState).toBe('yellow'); // prior issue visible on before column
+    expect(s1.newState).toBe('grey');      // still needs review
+  });
+
+  it('unchanged lines after the modification are unaffected', () => {
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary: [{ start: 1, end: 1, state: 'yellow' }],
+      sessionReviews: [],
+      modifiedLineCount: 10,
+    });
+
+    // Lines 2-10 are unchanged, no prior reviews → green/green
+    for (let l = 2; l <= 10; l++) {
+      const s = states.find(s => s.line === l);
+      expect(s.beforeState).toBe('green');
       expect(s.newState).toBe('green');
     }
   });
