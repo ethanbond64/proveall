@@ -136,7 +136,7 @@ export function useLineReviewDecorations(
         }
         // Commit mode: use approx mapping so modified lines in a hunk
         // still show the prior review state of the corresponding original line.
-        const origLine = mapping.modifiedToOriginalApprox(modLine);
+        const origLine = mapping.modifiedToOriginal(modLine);
         if (origLine === null) {
           return 'none';
         }

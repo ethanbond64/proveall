@@ -43,7 +43,7 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
 
   const results = [];
   for (let line = 1; line <= modifiedLineCount; line++) {
-    const origLineApprox = mapping.modifiedToOriginalApprox(line);
+    const origLineApprox = mapping.modifiedToOriginal(line);
 
     // Before state — uses approx mapping so modified lines still
     // show prior review state of their corresponding original line
@@ -130,21 +130,6 @@ describe('buildLineMapping', () => {
     expect(mapping.originalToModified(10)).toBe(5);
   });
 
-  it('handles modification (same range size, lines changed)', () => {
-    // Lines 5-7 modified (3 lines replaced with 3 lines)
-    const lineChanges = [{
-      originalStartLineNumber: 5,
-      originalEndLineNumber: 7,
-      modifiedStartLineNumber: 5,
-      modifiedEndLineNumber: 7,
-    }];
-    const mapping = buildLineMapping(lineChanges);
-
-    expect(mapping.modifiedToOriginal(4)).toBe(4);
-    expect(mapping.modifiedToOriginal(5)).toBeNull();
-    expect(mapping.modifiedToOriginal(7)).toBeNull();
-    expect(mapping.modifiedToOriginal(8)).toBe(8); // no offset change
-  });
 });
 
 describe('dual-gutter decoration: insertion before reviewed lines', () => {
@@ -216,10 +201,10 @@ describe('dual-gutter decoration: insertion before reviewed lines', () => {
   });
 });
 
-describe('modifiedToOriginalApprox', () => {
+describe('modifiedToOriginal: positional mapping within hunks', () => {
   it('returns identity when no changes', () => {
     const mapping = buildLineMapping([]);
-    expect(mapping.modifiedToOriginalApprox(5)).toBe(5);
+    expect(mapping.modifiedToOriginal(5)).toBe(5);
   });
 
   it('maps positionally within a same-size modification hunk', () => {
@@ -232,11 +217,11 @@ describe('modifiedToOriginalApprox', () => {
     }];
     const mapping = buildLineMapping(lineChanges);
 
-    expect(mapping.modifiedToOriginalApprox(4)).toBe(4);
-    expect(mapping.modifiedToOriginalApprox(5)).toBe(5);
-    expect(mapping.modifiedToOriginalApprox(6)).toBe(6);
-    expect(mapping.modifiedToOriginalApprox(7)).toBe(7);
-    expect(mapping.modifiedToOriginalApprox(8)).toBe(8);
+    expect(mapping.modifiedToOriginal(4)).toBe(4);
+    expect(mapping.modifiedToOriginal(5)).toBe(5);
+    expect(mapping.modifiedToOriginal(6)).toBe(6);
+    expect(mapping.modifiedToOriginal(7)).toBe(7);
+    expect(mapping.modifiedToOriginal(8)).toBe(8);
   });
 
   it('clamps to original range when modified hunk is larger', () => {
@@ -249,12 +234,12 @@ describe('modifiedToOriginalApprox', () => {
     }];
     const mapping = buildLineMapping(lineChanges);
 
-    expect(mapping.modifiedToOriginalApprox(5)).toBe(5); // pos 0 → orig 5
-    expect(mapping.modifiedToOriginalApprox(6)).toBe(6); // pos 1 → orig 6
-    expect(mapping.modifiedToOriginalApprox(7)).toBe(6); // pos 2 → clamped to orig 6
-    expect(mapping.modifiedToOriginalApprox(8)).toBe(6); // clamped
-    expect(mapping.modifiedToOriginalApprox(9)).toBe(6); // clamped
-    expect(mapping.modifiedToOriginalApprox(10)).toBe(7); // after hunk, offset adjusted
+    expect(mapping.modifiedToOriginal(5)).toBe(5); // pos 0 → orig 5
+    expect(mapping.modifiedToOriginal(6)).toBe(6); // pos 1 → orig 6
+    expect(mapping.modifiedToOriginal(7)).toBe(6); // pos 2 → clamped to orig 6
+    expect(mapping.modifiedToOriginal(8)).toBe(6); // clamped
+    expect(mapping.modifiedToOriginal(9)).toBe(6); // clamped
+    expect(mapping.modifiedToOriginal(10)).toBe(7); // after hunk, offset adjusted
   });
 
   it('returns null for pure insertions (no original lines)', () => {
@@ -266,10 +251,10 @@ describe('modifiedToOriginalApprox', () => {
     }];
     const mapping = buildLineMapping(lineChanges);
 
-    expect(mapping.modifiedToOriginalApprox(4)).toBe(4);
-    expect(mapping.modifiedToOriginalApprox(5)).toBeNull();
-    expect(mapping.modifiedToOriginalApprox(9)).toBeNull();
-    expect(mapping.modifiedToOriginalApprox(10)).toBe(5);
+    expect(mapping.modifiedToOriginal(4)).toBe(4);
+    expect(mapping.modifiedToOriginal(5)).toBeNull();
+    expect(mapping.modifiedToOriginal(9)).toBeNull();
+    expect(mapping.modifiedToOriginal(10)).toBe(5);
   });
 });
 
