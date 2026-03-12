@@ -155,11 +155,11 @@ export function useLineReviewDecorations(
           return lineReviews.defaultState;
         }
 
-        // 3. In branch mode, lineSummary uses modified-side numbers —
-        //    check it directly for the new-state column.
+        // 3. In branch mode, lineSummary uses modified-side numbers.
+        //    Default to green (no prior state to worry about).
         if (isBranchMode) {
           const branchState = priorReviewMap.get(modLine);
-          if (branchState) return branchState;
+          return branchState || 'green';
         }
 
         // 4. In diff hunk, not yet reviewed → grey (unreviewed-required)

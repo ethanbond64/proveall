@@ -65,13 +65,7 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
       newState = sessionState;
     } else if (isBranchMode) {
       const branchState = priorReviewMap.get(line);
-      if (branchState) {
-        newState = branchState;
-      } else if (diffLines.has(line)) {
-        newState = 'grey';
-      } else {
-        newState = beforeState;
-      }
+      newState = branchState || 'green';
     } else if (diffLines.has(line)) {
       newState = 'grey';
     } else {
@@ -370,10 +364,10 @@ describe('dual-gutter decoration: branch mode', () => {
       expect(s.newState).toBe('green');
     }
 
-    // Lines 6-8: in diff hunk but NOT in lineSummary → grey
+    // Lines 6-8: in diff hunk but NOT in lineSummary → green (branch default)
     for (let l = 6; l <= 8; l++) {
       const s = states.find(s => s.line === l);
-      expect(s.newState).toBe('grey');
+      expect(s.newState).toBe('green');
     }
 
     // Lines 9-10: not in diff hunk, not in lineSummary → carry forward green
@@ -396,17 +390,17 @@ describe('dual-gutter decoration: branch mode', () => {
       isBranchMode: true,
     });
 
-    // Line 1: in diff hunk, no lineSummary → grey
-    expect(states.find(s => s.line === 1).newState).toBe('grey');
+    // Line 1: in diff hunk, no lineSummary → green (branch default)
+    expect(states.find(s => s.line === 1).newState).toBe('green');
 
     // Lines 2-4: yellow in lineSummary → yellow
     for (let l = 2; l <= 4; l++) {
       expect(states.find(s => s.line === l).newState).toBe('yellow');
     }
 
-    // Line 5-8: in diff hunk, no lineSummary → grey
+    // Line 5-8: in diff hunk, no lineSummary → green (branch default)
     for (let l = 5; l <= 8; l++) {
-      expect(states.find(s => s.line === l).newState).toBe('grey');
+      expect(states.find(s => s.line === l).newState).toBe('green');
     }
   });
 
