@@ -71,14 +71,23 @@ export function buildLineMapping(lineChanges) {
 
   return {
     modifiedToOriginal(modLine) {
-      if (modToOrig.has(modLine)) return modToOrig.get(modLine);
+      if (modToOrig.has(modLine)) {
+        return modToOrig.get(modLine);
+      }
       // After all hunks — apply the final cumulative offset
-      if (modLine >= tailModStart) return modLine + tailOffset;
-      return modLine; // shouldn't happen, but safe fallback
+      if (modLine >= tailModStart) {
+        return modLine + tailOffset;
+      }
+      // Shouldn't happen, but safe fallback
+      return modLine;
     },
     originalToModified(origLine) {
-      if (origToMod.has(origLine)) return origToMod.get(origLine);
-      if (origLine >= tailOrigStart) return origLine - tailOffset;
+      if (origToMod.has(origLine)) {
+        return origToMod.get(origLine);
+      }
+      if (origLine >= tailOrigStart) {
+        return origLine - tailOffset;
+      }
       return origLine;
     },
   };
