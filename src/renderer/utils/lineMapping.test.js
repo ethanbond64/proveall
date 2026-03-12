@@ -6,7 +6,7 @@ import { buildLineMapping } from './lineMapping.js';
  * to verify that lineSummary (original-side) entries are correctly mapped
  * and do NOT bleed onto wrong modified-side line numbers.
  */
-function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifiedLineCount }) {
+function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifiedLineCount, isBranchMode = false }) {
   const mapping = buildLineMapping(lineChanges);
 
   // Build diff lines set (modified-side)
@@ -21,12 +21,14 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
     });
   }
 
-  // Build prior review map (original-side line numbers)
-  const priorReviewOriginal = new Map();
+  // Build prior review map.
+  // In commit mode: original-side line numbers.
+  // In branch mode: modified-side line numbers.
+  const priorReviewMap = new Map();
   if (lineSummary) {
     lineSummary.forEach(entry => {
       for (let l = entry.start; l <= entry.end; l++) {
-        priorReviewOriginal.set(l, entry.state);
+        priorReviewMap.set(l, entry.state);
       }
     });
   }
@@ -43,15 +45,17 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
 
   const results = [];
   for (let line = 1; line <= modifiedLineCount; line++) {
-    const origLineApprox = mapping.modifiedToOriginal(line);
-
-    // Before state — uses approx mapping so modified lines still
-    // show prior review state of their corresponding original line
+    // Before state
     let beforeState;
-    if (origLineApprox === null) {
-      beforeState = 'none';
+    if (isBranchMode) {
+      beforeState = 'green';
     } else {
-      beforeState = priorReviewOriginal.get(origLineApprox) || 'green';
+      const origLine = mapping.modifiedToOriginal(line);
+      if (origLine === null) {
+        beforeState = 'none';
+      } else {
+        beforeState = priorReviewMap.get(origLine) || 'green';
+      }
     }
 
     // New state
@@ -59,6 +63,15 @@ function computeGutterStates({ lineChanges, lineSummary, sessionReviews, modifie
     const sessionState = reviewedLines.get(line);
     if (sessionState) {
       newState = sessionState;
+    } else if (isBranchMode) {
+      const branchState = priorReviewMap.get(line);
+      if (branchState) {
+        newState = branchState;
+      } else if (diffLines.has(line)) {
+        newState = 'grey';
+      } else {
+        newState = beforeState;
+      }
     } else if (diffLines.has(line)) {
       newState = 'grey';
     } else {
@@ -313,6 +326,106 @@ describe('dual-gutter decoration: single line modification', () => {
       const s = states.find(s => s.line === l);
       expect(s.beforeState).toBe('green');
       expect(s.newState).toBe('green');
+    }
+  });
+});
+
+describe('dual-gutter decoration: branch mode', () => {
+  // In branch mode:
+  // - lineSummary uses MODIFIED-side line numbers (not original)
+  // - Before column is always green (base branch = approved)
+  // - New column should show lineSummary state for reviewed lines,
+  //   grey for unreviewed diff lines
+
+  const lineChanges = [{
+    originalStartLineNumber: 1,
+    originalEndLineNumber: 5,
+    modifiedStartLineNumber: 1,
+    modifiedEndLineNumber: 8,
+  }];
+
+  it('should show lineSummary state (not grey) for reviewed modified lines', () => {
+    // Lines 1-5 were reviewed as green in a prior branch review event
+    const lineSummary = [
+      { start: 1, end: 5, state: 'green' },
+    ];
+
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary,
+      sessionReviews: [],
+      modifiedLineCount: 10,
+      isBranchMode: true,
+    });
+
+    // Before column: always green in branch mode
+    for (let l = 1; l <= 10; l++) {
+      const s = states.find(s => s.line === l);
+      expect(s.beforeState).toBe('green');
+    }
+
+    // Lines 1-5: reviewed green in lineSummary → new=green (not grey)
+    for (let l = 1; l <= 5; l++) {
+      const s = states.find(s => s.line === l);
+      expect(s.newState).toBe('green');
+    }
+
+    // Lines 6-8: in diff hunk but NOT in lineSummary → grey
+    for (let l = 6; l <= 8; l++) {
+      const s = states.find(s => s.line === l);
+      expect(s.newState).toBe('grey');
+    }
+
+    // Lines 9-10: not in diff hunk, not in lineSummary → carry forward green
+    for (let l = 9; l <= 10; l++) {
+      const s = states.find(s => s.line === l);
+      expect(s.newState).toBe('green');
+    }
+  });
+
+  it('should show yellow/red lineSummary state for non-green reviewed lines', () => {
+    const lineSummary = [
+      { start: 2, end: 4, state: 'yellow' },
+    ];
+
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary,
+      sessionReviews: [],
+      modifiedLineCount: 10,
+      isBranchMode: true,
+    });
+
+    // Line 1: in diff hunk, no lineSummary → grey
+    expect(states.find(s => s.line === 1).newState).toBe('grey');
+
+    // Lines 2-4: yellow in lineSummary → yellow
+    for (let l = 2; l <= 4; l++) {
+      expect(states.find(s => s.line === l).newState).toBe('yellow');
+    }
+
+    // Line 5-8: in diff hunk, no lineSummary → grey
+    for (let l = 5; l <= 8; l++) {
+      expect(states.find(s => s.line === l).newState).toBe('grey');
+    }
+  });
+
+  it('session reviews override lineSummary in branch mode', () => {
+    const lineSummary = [
+      { start: 1, end: 3, state: 'yellow' },
+    ];
+
+    const states = computeGutterStates({
+      lineChanges,
+      lineSummary,
+      sessionReviews: [{ start: 1, end: 3, state: 'green' }],
+      modifiedLineCount: 10,
+      isBranchMode: true,
+    });
+
+    // Session review overrides lineSummary
+    for (let l = 1; l <= 3; l++) {
+      expect(states.find(s => s.line === l).newState).toBe('green');
     }
   });
 });
