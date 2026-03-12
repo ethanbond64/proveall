@@ -118,15 +118,38 @@ function reviewReducer(state, action) {
       const newOpenFiles = new Map(state.openFiles);
       newOpenFiles.set(path, data);
 
-      // lineSummary is stored in openFiles and passed separately to the
-      // decoration hook (which handles original→modified line mapping).
-      // Do NOT merge lineSummary into session.fileReviews.lineRanges —
-      // lineRanges uses modified-side line numbers, while lineSummary
-      // uses original-side line numbers.
+      // In commit mode, lineSummary uses original-side line numbers and is
+      // handled separately by the decoration hook via the lineSummary prop.
+      // Do NOT merge it into lineRanges (which uses modified-side numbers).
+      //
+      // In branch mode, lineSummary uses modified-side line numbers, so it
+      // IS safe to merge into lineRanges. This is needed for the file progress
+      // computation and decoration hook's reviewedLines check.
+      const newFileReviews = new Map(state.session.fileReviews);
+
+      if (state.mode === BRANCH_COMPARISON_MODE && data.lineSummary && data.lineSummary.length > 0) {
+        const existingFileReview = newFileReviews.get(path) || { defaultState: null, lineRanges: [] };
+
+        const lineRangesFromBackend = data.lineSummary.map(entry => ({
+          start: entry.start,
+          end: entry.end,
+          state: entry.state,
+          issueRef: entry.issueId ? String(entry.issueId) : null,
+        }));
+
+        newFileReviews.set(path, {
+          ...existingFileReview,
+          lineRanges: lineRangesFromBackend,
+        });
+      }
 
       return {
         ...state,
         openFiles: newOpenFiles,
+        session: {
+          ...state.session,
+          fileReviews: newFileReviews,
+        },
       };
     }
 
