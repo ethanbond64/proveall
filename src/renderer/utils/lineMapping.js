@@ -2,22 +2,17 @@
  * Builds bidirectional line-number mappings between original and modified sides
  * of a Monaco diff editor, using the raw lineChanges from getLineChanges().
  *
- * For unchanged lines (outside any diff hunk), computes a cumulative offset
- * from insertions/deletions in prior hunks.
- * For lines within a modification hunk (both sides have lines), maps
- * positionally within the hunk, clamped to the original range.
- * For pure insertions (no original lines), returns null.
+ * Precomputes lookup maps in a single pass over the hunks so that individual
+ * lookups are O(1).
  */
 export function buildLineMapping(lineChanges) {
   if (!lineChanges || lineChanges.length === 0) {
-    // No changes — every line maps 1:1
     return {
       originalToModified: (line) => line,
       modifiedToOriginal: (line) => line,
     };
   }
 
-  // Build sorted list of hunks with both sides
   const hunks = lineChanges
     .map(change => ({
       origStart: change.originalStartLineNumber,
@@ -27,68 +22,66 @@ export function buildLineMapping(lineChanges) {
     }))
     .sort((a, b) => a.modStart - b.modStart);
 
-  /**
-   * Map a modified-side line number to the corresponding original-side line number.
-   * For unchanged lines: computes exact mapping via cumulative offset.
-   * For modification hunks (both sides have lines): positional mapping, clamped.
-   * For pure insertions (no original lines): returns null.
-   */
-  function modifiedToOriginal(modLine) {
-    let offset = 0;
+  // Precompute both maps in a single walk through the hunks.
+  // modToOrig: modified line → original line (or null for pure insertions)
+  // origToMod: original line → modified line (or null for lines inside a hunk)
+  const modToOrig = new Map();
+  const origToMod = new Map();
 
-    for (const hunk of hunks) {
-      if (modLine < hunk.modStart) {
-        return modLine + offset;
-      }
+  let modCursor = 1;
+  let origCursor = 1;
 
-      const modHunkSize = Math.max(0, hunk.modEnd - hunk.modStart + 1);
-      const origHunkSize = Math.max(0, hunk.origEnd - hunk.origStart + 1);
+  for (const hunk of hunks) {
+    const origHunkSize = Math.max(0, hunk.origEnd - hunk.origStart + 1);
+    const modHunkSize = Math.max(0, hunk.modEnd - hunk.modStart + 1);
 
-      if (hunk.modEnd >= hunk.modStart && modLine >= hunk.modStart && modLine <= hunk.modEnd) {
-        // Inside the hunk on the modified side
-        if (origHunkSize === 0) {
-          // Pure insertion — no original lines to map to
-          return null;
-        }
-        // Positional mapping within the hunk, clamped to original range
-        const posInHunk = modLine - hunk.modStart;
-        return Math.min(hunk.origStart + posInHunk, hunk.origEnd);
-      }
-
-      offset += origHunkSize - modHunkSize;
+    // Unchanged lines before this hunk — 1:1 mapping
+    while (modCursor < hunk.modStart) {
+      modToOrig.set(modCursor, origCursor);
+      origToMod.set(origCursor, modCursor);
+      modCursor++;
+      origCursor++;
     }
 
-    return modLine + offset;
-  }
-
-  /**
-   * Map an original-side line number to the corresponding modified-side line number.
-   * Returns null if the line is inside a diff hunk (no 1:1 mapping).
-   */
-  function originalToModified(origLine) {
-    let offset = 0; // cumulative: modified = original + offset
-
-    for (const hunk of hunks) {
-      const origHunkSize = Math.max(0, hunk.origEnd - hunk.origStart + 1);
-      const modHunkSize = Math.max(0, hunk.modEnd - hunk.modStart + 1);
-
-      // Before this hunk on the original side
-      if (origLine < hunk.origStart) {
-        return origLine + offset;
+    // Lines inside the hunk
+    // Modified side → original side (positional, clamped)
+    for (let i = 0; i < modHunkSize; i++) {
+      const modLine = hunk.modStart + i;
+      if (origHunkSize === 0) {
+        // Pure insertion — no original counterpart
+        modToOrig.set(modLine, null);
+      } else {
+        // Positional mapping, clamped to original range
+        modToOrig.set(modLine, Math.min(hunk.origStart + i, hunk.origEnd));
       }
-
-      // Inside the original side of this hunk
-      if (hunk.origEnd >= hunk.origStart && origLine >= hunk.origStart && origLine <= hunk.origEnd) {
-        return null; // inside a changed region
-      }
-
-      // Past this hunk — accumulate offset
-      offset += modHunkSize - origHunkSize;
     }
 
-    // After all hunks
-    return origLine + offset;
+    // Original side → modified side (null — inside a changed region)
+    for (let i = 0; i < origHunkSize; i++) {
+      origToMod.set(hunk.origStart + i, null);
+    }
+
+    modCursor = hunk.modStart + modHunkSize;
+    origCursor = hunk.origStart + origHunkSize;
   }
 
-  return { originalToModified, modifiedToOriginal };
+  // Remaining unchanged lines after the last hunk — store the offset so
+  // the lookup function can compute them without knowing total line count.
+  const tailOffset = origCursor - modCursor;
+  const tailModStart = modCursor;
+  const tailOrigStart = origCursor;
+
+  return {
+    modifiedToOriginal(modLine) {
+      if (modToOrig.has(modLine)) return modToOrig.get(modLine);
+      // After all hunks — apply the final cumulative offset
+      if (modLine >= tailModStart) return modLine + tailOffset;
+      return modLine; // shouldn't happen, but safe fallback
+    },
+    originalToModified(origLine) {
+      if (origToMod.has(origLine)) return origToMod.get(origLine);
+      if (origLine >= tailOrigStart) return origLine - tailOffset;
+      return origLine;
+    },
+  };
 }
