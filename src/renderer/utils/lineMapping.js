@@ -46,23 +46,21 @@ export function buildLineMapping(lineChanges) {
     // Lines inside the hunk
     // Modified side → original side (positional, clamped)
     for (let i = 0; i < modHunkSize; i++) {
-      const modLine = hunk.modStart + i;
       if (origHunkSize === 0) {
         // Pure insertion — no original counterpart
-        modToOrig.set(modLine, null);
+        modToOrig.set(modCursor, null);
       } else {
         // Positional mapping, clamped to original range
-        modToOrig.set(modLine, Math.min(hunk.origStart + i, hunk.origEnd));
+        modToOrig.set(modCursor, Math.min(hunk.origStart + i, hunk.origEnd));
       }
+      modCursor++;
     }
 
     // Original side → modified side (null — inside a changed region)
     for (let i = 0; i < origHunkSize; i++) {
-      origToMod.set(hunk.origStart + i, null);
+      origToMod.set(origCursor, null);
+      origCursor++;
     }
-
-    modCursor = hunk.modStart + modHunkSize;
-    origCursor = hunk.origStart + origHunkSize;
   }
 
   // Remaining unchanged lines after the last hunk — store the offset so
