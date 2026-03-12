@@ -32,8 +32,8 @@ export function buildLineMapping(lineChanges) {
   let origCursor = 1;
 
   for (const hunk of hunks) {
-    const origHunkSize = Math.max(0, hunk.origEnd - hunk.origStart + 1);
-    const modHunkSize = Math.max(0, hunk.modEnd - hunk.modStart + 1);
+    const origHunkSize = Math.max(0, (hunk.origEnd - hunk.origStart) + 1);
+    const modHunkSize = Math.max(0, (hunk.modEnd - hunk.modStart) + 1);
 
     // Unchanged lines before this hunk — 1:1 mapping
     while (modCursor < hunk.modStart) {
