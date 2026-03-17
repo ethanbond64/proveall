@@ -408,7 +408,7 @@ fn test_commit_bulk_merge_only_files_separated() {
 
     // c2 on feature: add another file
     std::fs::write(dir.path().join("feature2.txt"), "feature2\n").unwrap();
-    let c2 = git_commit(&dir, "add feature2.txt");
+    git_commit(&dir, "add feature2.txt");
 
     // Make a change on main (different file) and merge into feature
     git_checkout(&dir, "main");
@@ -463,7 +463,7 @@ fn test_commit_bulk_file_in_both_merge_and_normal_not_merge_only() {
 
     // c1 on feature: modify base.txt
     std::fs::write(dir.path().join("base.txt"), "feature change\n").unwrap();
-    let c1 = git_commit(&dir, "modify base.txt on feature");
+    git_commit(&dir, "modify base.txt on feature");
 
     // Main also modifies base.txt (will appear in merge diff too)
     git_checkout(&dir, "main");
@@ -507,7 +507,7 @@ fn test_commit_bulk_conflicted_merge_conflict_files_not_merge_only() {
 
     // c1 on feature: add a separate file
     std::fs::write(dir.path().join("feature.txt"), "feature\n").unwrap();
-    let c1 = git_commit(&dir, "add feature.txt");
+    git_commit(&dir, "add feature.txt");
 
     // Modify base.txt on feature to set up conflict
     std::fs::write(dir.path().join("base.txt"), "feature version\n").unwrap();
