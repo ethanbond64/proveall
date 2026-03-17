@@ -1,16 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import * as monaco from 'monaco-editor';
+import { buildLineMapping } from '../../../utils/lineMapping.js';
 
 
 /**
- * Minimal hook to add line review decorations to a Monaco editor
+ * Hook to add dual-column line review decorations to a Monaco editor.
+ * Renders two dots per line in the glyph margin:
+ *   - Left dot ("Before"): prior review state from lineSummary
+ *   - Right dot ("New"): current session review state
  */
 export function useLineReviewDecorations(
   editor,
   changeBlocks,
   lineReviews,
   isInteractive,
-  path
+  path,
+  lineSummary,
+  lineChanges,
+  isBranchMode
 ) {
   const decorationsRef = useRef([]);
   const selectionHighlightRef = useRef([]);
@@ -68,7 +75,10 @@ export function useLineReviewDecorations(
     }
   };
 
-  // Update decorations when lineReviews or changeBlocks change
+  // Build line mapping from lineChanges (memoized)
+  const mapping = useMemo(() => buildLineMapping(lineChanges), [lineChanges]);
+
+  // Update decorations when lineReviews, changeBlocks, lineSummary, or mapping change
   useEffect(() => {
     // Use the stable editor reference
     const currentEditor = editorRef.current;
@@ -96,7 +106,7 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Build a map of explicitly reviewed lines
+      // Build a map of explicitly reviewed lines (new session reviews, modified-side line numbers)
       const reviewedLines = new Map();
       if (lineReviews && lineReviews.lineRanges && lineReviews.lineRanges.length > 0) {
         lineReviews.lineRanges.forEach(range => {
@@ -106,74 +116,90 @@ export function useLineReviewDecorations(
         });
       }
 
-      // Iterate over ALL lines in the file
-      for (let line = 1; line <= lineCount; line++) {
-        const reviewState = reviewedLines.get(line);
-        const isDiffLine = diffLines.has(line);
-
-        if (reviewState) {
-          // Line has an explicit review — show colored dot
-          decorations.push({
-            range: new monaco.Range(line, 1, line, 1),
-            options: {
-              isWholeLine: false,
-              glyphMarginClassName: `line-review-dot-${reviewState}`,
-              glyphMarginHoverMessage: {
-                value: `Review status: ${reviewState}${isInteractive ? ' (click to change)' : ''}`
-              }
-            }
-          });
-        } else if (lineReviews && lineReviews.defaultState) {
-          // No explicit review, but file has a default state
-          decorations.push({
-            range: new monaco.Range(line, 1, line, 1),
-            options: {
-              isWholeLine: false,
-              glyphMarginClassName: `line-review-dot-${lineReviews.defaultState}`,
-              glyphMarginHoverMessage: {
-                value: `File default: ${lineReviews.defaultState}${isInteractive ? ' (click to change)' : ''}`
-              }
-            }
-          });
-        } else if (isDiffLine) {
-          // Unreviewed diff line — required review
-          if (isInteractive) {
-            decorations.push({
-              range: new monaco.Range(line, 1, line, 1),
-              options: {
-                isWholeLine: false,
-                glyphMarginClassName: 'line-review-dot-unreviewed-required',
-                glyphMarginHoverMessage: {
-                  value: 'Click to review (required — part of diff)'
-                }
-              }
-            });
-          } else {
-            decorations.push({
-              range: new monaco.Range(line, 1, line, 1),
-              options: {
-                isWholeLine: false,
-                glyphMarginClassName: 'line-review-dot-green',
-                glyphMarginHoverMessage: {
-                  value: 'Not explicitly reviewed (assumed good)'
-                }
-              }
-            });
+      // Build a map of prior review states from lineSummary.
+      // In commit mode: original-side line numbers (need mapping).
+      // In branch mode: modified-side line numbers (use directly).
+      const priorReviewMap = new Map();
+      if (lineSummary && lineSummary.length > 0) {
+        lineSummary.forEach(entry => {
+          for (let line = entry.start; line <= entry.end; line++) {
+            priorReviewMap.set(line, entry.state);
           }
-        } else if (isInteractive) {
-          // Non-diff line, no review — optional, plain gray dot
-          decorations.push({
-            range: new monaco.Range(line, 1, line, 1),
-            options: {
-              isWholeLine: false,
-              glyphMarginClassName: 'line-review-dot-unreviewed',
-              glyphMarginHoverMessage: {
-                value: 'Click to review (optional)'
-              }
-            }
-          });
+        });
+      }
+
+      // Helper: get the "before" state for a modified-side line.
+      const getBeforeState = (modLine) => {
+        if (isBranchMode) {
+          // In branch mode, the original is the base branch — all lines assumed green.
+          return 'green';
         }
-        // In read-only mode, non-diff lines with no review get no decoration
+        // Commit mode: use approx mapping so modified lines in a hunk
+        // still show the prior review state of the corresponding original line.
+        const origLine = mapping.modifiedToOriginal(modLine);
+        if (origLine === null) {
+          return 'none';
+        }
+        const priorState = priorReviewMap.get(origLine);
+        return priorState || 'green';
+      };
+
+      // Helper: get the "new" state for a modified-side line
+      const getNewState = (modLine) => {
+        // 1. Explicitly reviewed in this session
+        const reviewState = reviewedLines.get(modLine);
+        if (reviewState) return reviewState;
+
+        // 2. File-level default state applies to all lines
+        if (lineReviews && lineReviews.defaultState) {
+          return lineReviews.defaultState;
+        }
+
+        // 3. In branch mode, lineSummary uses modified-side numbers.
+        //    Default to green (no prior state to worry about).
+        if (isBranchMode) {
+          const branchState = priorReviewMap.get(modLine);
+          return branchState || 'green';
+        }
+
+        // 4. In diff hunk, not yet reviewed → grey (unreviewed-required)
+        if (diffLines.has(modLine)) return 'grey';
+
+        // 5. Not in diff hunk → carry forward the before state
+        return getBeforeState(modLine);
+      };
+
+      // Iterate over ALL lines in the modified editor
+      for (let line = 1; line <= lineCount; line++) {
+        const beforeState = getBeforeState(line);
+        const newState = getNewState(line);
+
+        // In read-only mode, skip lines with no meaningful state
+        if (!isInteractive && beforeState === 'none' && newState === 'grey') {
+          continue;
+        }
+
+        const className = `line-review-dual before-${beforeState} new-${newState}`;
+
+        const hoverParts = [];
+        if (beforeState !== 'none') {
+          hoverParts.push(`Before: ${beforeState}`);
+        }
+        hoverParts.push(`New: ${newState === 'grey' ? 'unreviewed' : newState}`);
+        if (isInteractive) {
+          hoverParts.push('(click to change)');
+        }
+
+        decorations.push({
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: className,
+            glyphMarginHoverMessage: {
+              value: hoverParts.join(' | ')
+            }
+          }
+        });
       }
 
       // Clear existing decorations and apply new ones in a single operation
@@ -203,7 +229,7 @@ export function useLineReviewDecorations(
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [lineReviews, changeBlocks, isInteractive]); // Note: not including editor in deps to avoid re-runs
+  }, [lineReviews, changeBlocks, lineSummary, mapping, isInteractive, isBranchMode]); // Note: not including editor in deps to avoid re-runs
 
   // Highlight glyph dots with blue outline when lines are selected in the editor
   useEffect(() => {

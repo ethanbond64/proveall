@@ -150,13 +150,14 @@ function EditorPanel({ selectedFile, onActiveFileChange = (_) => {} }) {
                 <p className="error-message">Failed to load file</p>
               </div>
             ) : activeTab.viewMode === 'ready' && fileData ? (
-              fileData.diff && activeTab.showDiff ? (
+              activeTab.showDiff ? (
                 <DiffEditor
-                  originalContent={fileData.diff}
+                  originalContent={fileData.diff || ''}
                   modifiedContent={fileData.content}
                   filename={activeTab.fileName}
                   path={activeTab.relativePath}
                   lineReviews={fileReviews}
+                  lineSummary={fileData.lineSummary}
                   readOnly={!isInteractiveReviewMode(context.mode)}
                 />
               ) : (

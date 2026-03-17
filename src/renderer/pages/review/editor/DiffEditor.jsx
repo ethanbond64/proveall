@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import { useLineReviewDecorations } from './useLineReviewDecorations';
 import { useReviewContext } from '../ReviewContext';
+import { BRANCH_COMPARISON_MODE } from '../../../constants';
 import ReviewPopup from '../components/ReviewPopup';
 
 // Helper function to get language from filename
@@ -36,14 +37,16 @@ function DiffEditor({
   filename,
   path,
   lineReviews,
+  lineSummary,
   readOnly = false
 }) {
   const context = useReviewContext();
   const diffEditorRef = useRef(null);
   const containerRef = useRef(null);
   const modifiedEditorRef = useRef(null);
-  const [renderSideBySide, setRenderSideBySide] = useState(true);
+  const renderSideBySide = true;
   const [changeBlocks, setChangeBlocks] = useState([]);
+  const [lineChanges, setLineChanges] = useState(null);
 
   // Store setChangeBlocks action in a ref to avoid re-renders
   const setChangeBlocksRef = useRef(context.actions?.setChangeBlocks);
@@ -79,14 +82,6 @@ function DiffEditor({
     };
   }, [readOnly]); // Remove renderSideBySide from dependencies
 
-  // Update renderSideBySide option when it changes
-  useEffect(() => {
-    if (!diffEditorRef.current) return;
-
-    diffEditorRef.current.updateOptions({
-      renderSideBySide: renderSideBySide
-    });
-  }, [renderSideBySide]);
 
   // Update models when content changes
   useEffect(() => {
@@ -130,21 +125,24 @@ function DiffEditor({
     const computeChangeBlocks = () => {
       if (!diffEditorRef.current) return;
 
-      const lineChanges = diffEditorRef.current.getLineChanges();
+      const rawLineChanges = diffEditorRef.current.getLineChanges();
       const blocks = [];
 
-      if (lineChanges) {
-        lineChanges.forEach(change => {
+      if (rawLineChanges) {
+        rawLineChanges.forEach(change => {
           if (change.modifiedStartLineNumber && change.modifiedEndLineNumber) {
             blocks.push({
               startLine: change.modifiedStartLineNumber,
-              endLine: change.modifiedEndLineNumber
+              endLine: change.modifiedEndLineNumber,
+              originalStartLine: change.originalStartLineNumber,
+              originalEndLine: change.originalEndLineNumber,
             });
           }
         });
       }
 
       setChangeBlocks(blocks);
+      setLineChanges(rawLineChanges);
 
       // Report change blocks to context using ref
       if (setChangeBlocksRef.current) {
@@ -171,20 +169,14 @@ function DiffEditor({
     changeBlocks,
     lineReviews,
     !readOnly, // isInteractive
-    path
+    path,
+    lineSummary,
+    lineChanges,
+    context.mode === BRANCH_COMPARISON_MODE
   );
-
-  const toggleViewMode = () => {
-    setRenderSideBySide(!renderSideBySide);
-  };
 
   return (
     <div className="diff-editor-container">
-      <div className="diff-editor-toolbar">
-        <button onClick={toggleViewMode} className="diff-view-toggle-btn">
-          {renderSideBySide ? 'Inline View' : 'Split View'}
-        </button>
-      </div>
       <div ref={containerRef} className="diff-editor-monaco-container" />
 
       {/* Render the line review popup when state is set */}

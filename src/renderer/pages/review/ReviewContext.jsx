@@ -118,13 +118,18 @@ function reviewReducer(state, action) {
       const newOpenFiles = new Map(state.openFiles);
       newOpenFiles.set(path, data);
 
-      // Parse lineSummary and merge into session.fileReviews.lineRanges
+      // In commit mode, lineSummary uses original-side line numbers and is
+      // handled separately by the decoration hook via the lineSummary prop.
+      // Do NOT merge it into lineRanges (which uses modified-side numbers).
+      //
+      // In branch mode, lineSummary uses modified-side line numbers, so it
+      // IS safe to merge into lineRanges. This is needed for the file progress
+      // computation and decoration hook's reviewedLines check.
       const newFileReviews = new Map(state.session.fileReviews);
 
-      if (data.lineSummary && data.lineSummary.length > 0) {
+      if (state.mode === BRANCH_COMPARISON_MODE && data.lineSummary && data.lineSummary.length > 0) {
         const existingFileReview = newFileReviews.get(path) || { defaultState: null, lineRanges: [] };
 
-        // Convert lineSummary entries to lineRanges format
         const lineRangesFromBackend = data.lineSummary.map(entry => ({
           start: entry.start,
           end: entry.end,
@@ -132,35 +137,9 @@ function reviewReducer(state, action) {
           issueRef: entry.issueId ? String(entry.issueId) : null,
         }));
 
-        // In branch mode, just use backend data directly (read-only)
-        // In commit mode, merge with existing session data
-        let finalLineRanges;
-        if (state.mode === BRANCH_COMPARISON_MODE) {
-          // Read-only mode: use backend data directly
-          finalLineRanges = lineRangesFromBackend;
-        } else {
-          // Commit mode: merge backend with session data
-          const mergedLineRanges = [...lineRangesFromBackend];
-
-          // Add any existing lineRanges that don't overlap with backend data
-          existingFileReview.lineRanges.forEach(existingRange => {
-            const overlaps = lineRangesFromBackend.some(backendRange =>
-              !(existingRange.end < backendRange.start || existingRange.start > backendRange.end)
-            );
-            if (!overlaps) {
-              mergedLineRanges.push(existingRange);
-            }
-          });
-
-          finalLineRanges = mergedLineRanges;
-        }
-
-        // Sort by start line
-        finalLineRanges.sort((a, b) => a.start - b.start);
-
         newFileReviews.set(path, {
           ...existingFileReview,
-          lineRanges: finalLineRanges,
+          lineRanges: lineRangesFromBackend,
         });
       }
 
