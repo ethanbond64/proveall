@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Diff viewer annotations to show before and after review state with better default logic.
+
 ## [0.6.1] - 2026-03-10
 
 ### Added
