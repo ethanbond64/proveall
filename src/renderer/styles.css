@@ -1253,6 +1253,10 @@ body {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
+.update-modal {
+  max-width: 400px;
+}
+
 .settings-checkbox-label {
   display: flex;
   align-items: center;
