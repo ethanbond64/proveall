@@ -78,6 +78,8 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         last_opened -> Nullable<Timestamp>,
+        connection_type -> Text,
+        ssh_config -> Nullable<Text>,
     }
 }
 
