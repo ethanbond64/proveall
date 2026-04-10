@@ -29,8 +29,18 @@ Use the system `ssh` binary rather than a Rust SSH crate. This gives us:
 **Connection lifecycle per host**:
 1. App establishes a ControlMaster connection (`ssh -nNf -o ControlMaster=yes -o ControlPath=<socket> user@host`)
 2. All subsequent operations use `-o ControlPath=<socket>` to reuse the authenticated channel instantly
-3. Socket lives in a temp directory (`/tmp/proveall-ssh-<hash>/`)
+3. Socket path is deterministic and derived from the connection parameters (see Socket Path below)
 4. On app exit, ControlMaster is killed and socket cleaned up
+
+**Socket path**:
+
+Sockets live under `$TMPDIR/proveall-ssh/` (using `std::env::temp_dir()`, which on macOS resolves to a per-user session-scoped directory like `/var/folders/.../T/`). The socket filename is a truncated SHA-256 of the canonical connection string `user@host:port` — for example `a3f9c1d8e2b47f01.ctl`.
+
+This approach:
+- **Is deterministic**: the same host always maps to the same socket path, so if the app crashes and restarts it can check whether an old ControlMaster is still alive via `ssh -O check -o ControlPath=<socket> ...` before starting a new one
+- **Is per-host**: each remote host gets its own independent socket and ControlMaster process
+- **Stays short**: hashing avoids exceeding the 104-character Unix domain socket path limit on macOS, regardless of how long the hostname or username is
+- **Is user-scoped**: `$TMPDIR` on macOS is already isolated per user session, so no cross-user collisions
 
 **Authentication flow**:
 1. Try key-based auth silently (respects `~/.ssh/config`, agent, and default key files)
@@ -227,12 +237,18 @@ For SSH projects currently open in the app, show a small status dot in the sideb
 ```
 ssh -nNf
     -o ControlMaster=yes
-    -o ControlPath=/tmp/proveall-ssh-abc123/ctl
+    -o ControlPath=$TMPDIR/proveall-ssh/<sha256_of_user@host:port>.ctl
     -o BatchMode=yes          ← fail immediately if interactive auth needed
     -o ConnectTimeout=5
     -p <port>
     user@host
 ```
+
+Before spawning, check if a socket already exists and is live:
+```
+ssh -O check -o ControlPath=<socket> user@host 2>/dev/null
+```
+Exit 0 → reuse existing ControlMaster. Non-zero → start a new one.
 
 If this exits 0 → connected, no user interaction needed.
 
