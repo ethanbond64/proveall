@@ -7,6 +7,9 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use base64::Engine;
 
+use crate::models::project::SshConfig;
+use crate::services::ssh_connection_manager::SshExecutor;
+
 pub struct PtySession {
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
     master: Arc<AsyncMutex<Box<dyn MasterPty + Send>>>,
@@ -171,5 +174,44 @@ impl PtyManager {
             let _ = child.kill();
         }
         Ok(())
+    }
+
+    /// Spawn an SSH PTY session for a remote project.
+    ///
+    /// Starts `ssh -tt -o ControlPath=<socket> -p <port> user@host` via the
+    /// existing portable_pty infrastructure (the connection is authenticated
+    /// through the already-established ControlMaster). After spawning, writes
+    /// an initial `cd <remote_path>\n` to land the shell in the project dir.
+    pub async fn spawn_ssh(
+        &self,
+        app: &AppHandle,
+        config: &SshConfig,
+        executor: &dyn SshExecutor,
+        cols: u16,
+        rows: u16,
+    ) -> Result<u32, String> {
+        let socket = executor.socket_path(config);
+        let socket_str = socket.to_string_lossy().into_owned();
+        let control_path_arg = format!("ControlPath={}", socket_str);
+        let port_str = config.port.to_string();
+        let user_host = format!("{}@{}", config.user, config.host);
+
+        let id = self
+            .spawn(
+                app,
+                "ssh",
+                &["-tt", "-o", &control_path_arg, "-p", &port_str, &user_host],
+                // cwd for the local process is irrelevant; we `cd` on the remote side.
+                "/",
+                cols,
+                rows,
+            )
+            .await?;
+
+        // Inject `cd <remote_path>` as the first thing the shell sees.
+        let cd_cmd = format!("cd {}\n", config.remote_path);
+        self.write(id, &cd_cmd).await?;
+
+        Ok(id)
     }
 }
