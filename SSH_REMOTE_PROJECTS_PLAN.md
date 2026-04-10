@@ -6,6 +6,95 @@ Add support for projects hosted on remote machines over SSH. Remote projects app
 
 ---
 
+## Incremental Commits
+
+Each commit leaves the app in a fully working state. Earlier commits add inert infrastructure; later commits activate it. No commit should break existing local project functionality.
+
+---
+
+### Commit 1 — DB migration and project model
+
+**Scope**: Data layer only. No behavior change.
+
+Files touched:
+- `tauri_src/migrations/<timestamp>_add_ssh_to_projects/up.sql` — add `connection_type` and `ssh_config` columns
+- `tauri_src/migrations/<timestamp>_add_ssh_to_projects/down.sql` — drop the columns
+- `tauri_src/src/models/project.rs` — add `connection_type: String` and `ssh_config: Option<String>` fields; add `SshConfig` struct with serde derive
+- `tauri_src/src/repositories/project_repository.rs` — include new fields in insert/select queries
+
+All existing local projects continue to work — `connection_type` defaults to `'local'` and `ssh_config` is `NULL`.
+
+---
+
+### Commit 2 — `SshExecutor` trait, `FakeSshExecutor`, and `SshConnectionManager`
+
+**Scope**: The core SSH abstraction and its production implementation, fully unit-tested. Nothing is wired into the app yet.
+
+Files touched:
+- `tauri_src/src/services/ssh_connection_manager.rs` — `SshExecutor` trait, `SshConnectionManager` (production impl), socket path derivation logic, `ConnectionState` enum
+- `tauri_src/src/services/fake_ssh_executor.rs` — `FakeSshExecutor` (test-only, behind `#[cfg(test)]` or `test-utils` feature)
+- `tauri_src/src/services/ssh_connection_manager_tests.rs` — unit tests for socket path, connection state, idempotency, auth failure
+
+`SshConnectionManager` is not yet registered in Tauri state — it exists and is tested but not called by anything.
+
+---
+
+### Commit 3 — Remote git and remote filesystem wrappers
+
+**Scope**: Route git and directory-listing operations through SSH for remote projects. Local projects are completely unaffected.
+
+Files touched:
+- `tauri_src/src/utils/remote_git.rs` — `run_git(project, args)` that dispatches to local `Command::new("git")` or `SshExecutor::run_command` based on `connection_type`
+- `tauri_src/src/utils/remote_fs.rs` — `list_directory(project, path)` with same dispatch pattern
+- `tauri_src/src/utils/git.rs` — each function gains a `project: &Project` parameter and delegates to `remote_git::run_git`; existing call sites updated
+- `tauri_src/src/commands/fs_commands.rs` — `get_directory` delegates to `remote_fs::list_directory`
+- `tauri_src/src/utils/remote_git_tests.rs` — unit tests using `FakeSshExecutor`
+- `tauri_src/src/utils/remote_fs_tests.rs` — unit tests using `FakeSshExecutor`
+
+Because no SSH project rows exist in the DB yet, the remote code paths are dead in production but exercised by tests.
+
+---
+
+### Commit 4 — Remote PTY sessions
+
+**Scope**: Terminal sessions for SSH projects launch `ssh -tt` locally instead of a shell. Local PTY is unchanged.
+
+Files touched:
+- `tauri_src/src/utils/pty.rs` — detect `connection_type == "ssh"` in `pty_spawn`; call `SshExecutor::spawn_pty_process` instead of local `portable_pty`; inject `cd <remote_path>\n` as initial write
+- `tauri_src/src/utils/pty_tests.rs` — unit tests for remote PTY spawn args, `cd` injection, output forwarding, exit event
+
+Again no SSH projects exist in production at this point, so no user-visible change.
+
+---
+
+### Commit 5 — Tauri SSH commands and Tauri state wiring
+
+**Scope**: Register `SshConnectionManager` in Tauri state; expose new commands; update existing commands to pass the project model through. This is the commit that makes SSH projects functional end-to-end on the backend.
+
+Files touched:
+- `tauri_src/src/lib.rs` — register `SshConnectionManager` as `Arc<dyn SshExecutor>` in Tauri managed state; register new commands
+- `tauri_src/src/commands/ssh_commands.rs` — implement `add_ssh_project`, `test_ssh_connection`, `get_ssh_connection_state`
+- `tauri_src/src/commands/project_commands.rs` — `open_project` accepts `user@host:path` strings; `fetch_projects` returns `connection_type` and `ssh_config` to the frontend
+- `tauri_src/src/commands/pty_commands.rs` — pass `SshExecutor` handle into PTY spawn for remote projects
+- `tauri_src/src/tests/ssh_integration_tests.rs` — integration tests wiring real DB + real services + `FakeSshExecutor`
+- `src/renderer/tauriAPI.js` — add wrappers for the three new commands
+
+---
+
+### Commit 6 — Frontend UI
+
+**Scope**: Menu page changes and new modals. This is the only user-visible commit.
+
+Files touched:
+- `src/renderer/pages/menu/MenuPage.jsx` — SSH badge and host subtitle for remote projects; "Add Remote Project" button
+- `src/renderer/pages/menu/AddSshProjectModal.jsx` — new modal with host/user/port/key/path fields and connection test flow
+- `src/renderer/components/SshPasswordModal.jsx` — password prompt shown when key auth fails
+- `src/renderer/components/SshConnectionIndicator.jsx` — connection state dot shown in project header for SSH projects
+- `src/renderer/pages/menu/__tests__/MenuPage.test.jsx` — rendering tests for SSH badge and mixed project lists
+- `src/renderer/pages/menu/__tests__/AddSshProjectModal.test.jsx` — form submission, password prompt branch, error states
+
+---
+
 ## Key Constraints
 
 - **Database stays local**: All SQLite operations remain on the host (projects table, branch_context, events, issues, reviews, etc.)
