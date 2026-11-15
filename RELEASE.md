@@ -1,6 +1,11 @@
 # Release Process
 
-This document describes the automated release process for ProveAll.
+> **Retired.** ProveAll was sunset on November 15, 2026, and v0.6.2 is the final release.
+> The workflows this document describes have been removed and the signing credentials
+> they relied on have been revoked. This file is kept as a record of how releases were
+> produced; the steps below no longer work.
+
+This document describes the automated release process that ProveAll used.
 
 ## Overview
 

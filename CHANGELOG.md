@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Sunset] - 2026-11-15
+
+Development of ProveAll has ended. v0.6.2 is the final release.
+
+### Changed
+- Project sunset: no further releases, fixes, or support. The repository is archived
+  read-only as a public record; the code remains available under the MIT license.
+- Retired the automated release pipeline (`.github/workflows/`). The workflow definitions
+  remain in Git history for reference.
 
 ## [0.6.2] - 2026-03-16
 
